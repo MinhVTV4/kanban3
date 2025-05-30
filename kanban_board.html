@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bảng Kanban Task</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none; 
+        }
+        .tasks-container::-webkit-scrollbar, #archived-tasks-list::-webkit-scrollbar, #task-detail-bottom-sheet::-webkit-scrollbar, #bs-change-log-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        .tasks-container::-webkit-scrollbar-track, #archived-tasks-list::-webkit-scrollbar-track, #task-detail-bottom-sheet::-webkit-scrollbar-track, #bs-change-log-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        .tasks-container::-webkit-scrollbar-thumb, #archived-tasks-list::-webkit-scrollbar-thumb, #task-detail-bottom-sheet::-webkit-scrollbar-thumb, #bs-change-log-list::-webkit-scrollbar-thumb {
+            background: #cbd5e1; /* Tailwind gray-400 */
+            border-radius: 10px;
+        }
+        .tasks-container::-webkit-scrollbar-thumb:hover, #archived-tasks-list::-webkit-scrollbar-thumb:hover, #task-detail-bottom-sheet::-webkit-scrollbar-thumb:hover, #bs-change-log-list::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af; /* Tailwind gray-500 */
+        }
+        .line-clamp-1, .line-clamp-2 {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+        }
+        .line-clamp-1 { -webkit-line-clamp: 1; }
+        .line-clamp-2 { -webkit-line-clamp: 2; }
+
+        .dragging { opacity: 0.5 !important; border: 2px dashed #3b82f6 !important; } 
+        .drag-over-column .tasks-container { background-color: #eff6ff !important; border: 1px dashed #93c5fd !important; } 
+        .wip-limit-exceeded .tasks-container { border: 2px dashed #ef4444 !important; background-color: #fee2e2 !important; } 
+        
+        .column-at-wip-limit > .column-header .task-count-badge::after {
+            content: " (WIP Limit!)";
+            color: #ef4444; 
+            font-weight: 600; 
+            font-size: 0.7rem; 
+            margin-left: 0.25rem;
+        }
+        .column-at-wip-limit {
+            border: 2px solid #ef4444 !important; 
+        }
+
+        .filter-bar {
+            max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; margin-bottom: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out, opacity 0.3s ease-out, padding-top 0.4s ease-out, padding-bottom 0.4s ease-out, margin-bottom 0.4s ease-out;
+        }
+        .filter-bar.filter-bar-visible {
+            max-height: 1000px; opacity: 1; padding-top: 1.25rem; 
+            padding-bottom: 1.25rem; margin-bottom: 1.5rem; 
+        }
+
+        #task-detail-bottom-sheet-overlay { transition: opacity 0.3s ease-in-out; }
+        #task-detail-bottom-sheet { transition: transform 0.3s ease-out; }
+
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2000;
+        }
+        #bs-change-log-container {
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out, opacity 0.3s ease-out, margin-top 0.4s ease-out, padding-top 0.4s ease-out;
+        }
+        #bs-change-log-container.visible {
+            max-height: 300px; 
+            opacity: 1;
+            margin-top: 0.75rem; 
+            padding-top: 0.75rem; 
+        }
+        #bs-change-log-list {
+            max-height: 250px; 
+            overflow-y: auto;
+        }
+
+    </style>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              'kanban-todo': '#ffe4e6', 
+              'kanban-todo-text': '#c91368',
+              'kanban-inprogress': '#fff3cd', 
+              'kanban-inprogress-text': '#d48806',
+              'kanban-done': '#e6ffed', 
+              'kanban-done-text': '#389e0d',
+              'priority-low': '#22c55e',
+              'priority-medium': '#f59e0b',
+              'priority-high': '#ef4444',
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-slate-100 text-slate-800">
+    <canvas id="confetti-canvas" class="fixed top-0 left-0 w-full h-full pointer-events-none z-[2000]"></canvas> 
+    <div class="app-container w-full"> 
+        <header id="app-main-header" class="text-center mb-6 max-w-screen-xl mx-auto px-4 md:px-6">
+            <h1 class="text-3xl font-semibold text-sky-600">
+                Bảng Ghi Chú Dự Án: <span id="project-display-name" class="text-purple-600">Đang tải...</span>
+            </h1>
+        </header>
+
+        <div class="actions-bar-container bg-white p-3 md:p-4 rounded-lg shadow mb-6 flex justify-end items-center gap-3 max-w-screen-xl mx-auto px-4 md:px-6"> 
+            <button id="view-archived-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-md flex items-center text-sm">
+                <span class="icon mr-2">🗄️</span> Xem Lưu Trữ
+            </button>
+            <button id="toggle-filter-bar-btn" class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-md flex items-center text-sm">
+                <span class="icon mr-2">☰</span> <span id="toggle-filter-text">Hiện Bộ Lọc</span>
+            </button>
+        </div>
+
+        <div class="filter-bar bg-white rounded-lg shadow grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4 items-end max-w-screen-xl mx-auto px-4 md:px-6" id="filter-bar"> 
+            <div class="form-group"> <label for="search-term-input" class="block text-sm font-medium text-slate-700 mb-1">Tìm theo tiêu đề:</label> <input type="text" id="search-term-input" placeholder="Nhập từ khóa..." class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm"> </div>
+            <div class="form-group"> <label for="filter-priority" class="block text-sm font-medium text-slate-700 mb-1">Lọc theo ưu tiên:</label> <select id="filter-priority" class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm"> <option value="">Tất cả ưu tiên</option> <option value="high">Cao</option> <option value="medium">Trung bình</option> <option value="low">Thấp</option> </select> </div>
+            <div class="form-group"> <label for="filter-assignee" class="block text-sm font-medium text-slate-700 mb-1">Lọc theo người thực hiện:</label> <select id="filter-assignee" class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm"> <option value="">Tất cả người thực hiện</option> </select> </div>
+            <div class="form-group"> <label for="filter-tag" class="block text-sm font-medium text-slate-700 mb-1">Lọc theo thẻ:</label> <select id="filter-tag" class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm"> <option value="">Tất cả thẻ</option> </select> </div>
+            <div class="form-group"> <label for="filter-blocked" class="block text-sm font-medium text-slate-700 mb-1">Lọc theo trạng thái chặn:</label> <select id="filter-blocked" class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm"> <option value="">Tất cả</option> <option value="yes">Bị chặn</option> <option value="no">Không bị chặn</option> </select> </div>
+            <div class="form-group"> <label for="filter-due-date" class="block text-sm font-medium text-slate-700 mb-1">Lọc theo ngày đến hạn:</label> <select id="filter-due-date" class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm"> <option value="">Tất cả ngày</option> <option value="overdue">Quá hạn</option> <option value="today">Hôm nay</option> <option value="next7days">Trong 7 ngày tới</option> <option value="noduedate">Không có ngày đến hạn</option> </select> </div>
+            <div class="actions xl:col-span-full 2xl:col-span-6 flex justify-end gap-3 mt-3 sm:mt-0 sm:self-end"> <button id="apply-filters-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-medium py-2 px-4 rounded-md text-sm">Áp dụng lọc</button> <button id="clear-filters-btn" class="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-md text-sm">Xóa bộ lọc</button> </div>
+        </div>
+
+        <div id="kanban-mobile-tabs" class="md:hidden flex bg-white border-b border-slate-200 mb-4 shadow-sm max-w-screen-xl mx-auto">
+            <button class="mobile-tab-button flex-1 text-center py-3 px-2 text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-sky-600 hover:border-sky-600 transition-colors flex items-center justify-center gap-1.5" id="tab-todo" data-status="todo">
+                <span class="icon">📝</span>Cần làm
+            </button>
+            <button class="mobile-tab-button flex-1 text-center py-3 px-2 text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-sky-600 hover:border-sky-600 transition-colors flex items-center justify-center gap-1.5" id="tab-inprogress" data-status="inprogress">
+                <span class="icon">⚙️</span>Đang làm
+            </button>
+            <button class="mobile-tab-button flex-1 text-center py-3 px-2 text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-sky-600 hover:border-sky-600 transition-colors flex items-center justify-center gap-1.5" id="tab-done" data-status="done">
+                <span class="icon">✔️</span>Hoàn thành
+            </button>
+        </div>
+
+        <button id="fab-add-task" class="fixed bottom-8 right-8 w-14 h-14 bg-sky-500 hover:bg-sky-600 text-white rounded-full text-3xl flex items-center justify-center shadow-lg z-50" title="Thêm công việc mới">+</button>
+
+        <div class="kanban-board grid grid-cols-1 md:grid-cols-3 gap-4 px-1 sm:px-2"> 
+            <div class="kanban-column bg-kanban-todo rounded-lg p-4 shadow-md flex flex-col" id="todo" data-status="todo" data-wip-limit="-1">
+                <div class="column-header flex items-center justify-between mb-4 pb-3 border-b border-rose-300">
+                    <span class="title-group flex items-center text-lg font-semibold text-kanban-todo-text">
+                        <svg class="column-icon w-6 h-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 3.75h7.5M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+                        <h2>Cần làm</h2>
+                    </span>
+                    <span class="task-count-badge bg-kanban-todo-text text-white text-xs font-medium px-2.5 py-0.5 rounded-full" id="todo-count">0</span>
+                </div>
+                <div class="tasks-container flex-grow space-y-3 min-h-[200px]"></div>
+            </div>
+            <div class="kanban-column bg-kanban-inprogress rounded-lg p-4 shadow-md flex flex-col" id="inprogress" data-status="inprogress" data-wip-limit="3">
+                 <div class="column-header flex items-center justify-between mb-4 pb-3 border-b border-amber-300">
+                    <span class="title-group flex items-center text-lg font-semibold text-kanban-inprogress-text">
+                        <svg class="column-icon w-6 h-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+                        <h2>Đang làm</h2>
+                    </span>
+                    <span class="task-count-badge bg-kanban-inprogress-text text-white text-xs font-medium px-2.5 py-0.5 rounded-full" id="inprogress-count">0</span>
+                </div>
+                <div class="tasks-container flex-grow space-y-3 min-h-[200px]"></div>
+            </div>
+            <div class="kanban-column bg-kanban-done rounded-lg p-4 shadow-md flex flex-col" id="done" data-status="done" data-wip-limit="-1">
+                 <div class="column-header flex items-center justify-between mb-4 pb-3 border-b border-green-300">
+                    <span class="title-group flex items-center text-lg font-semibold text-kanban-done-text">
+                        <svg class="column-icon w-6 h-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <h2>Hoàn thành</h2>
+                    </span>
+                    <span class="task-count-badge bg-kanban-done-text text-white text-xs font-medium px-2.5 py-0.5 rounded-full" id="done-count">0</span>
+                </div>
+                <div class="tasks-container flex-grow space-y-3 min-h-[200px]"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="add-task-modal" class="modal hidden fixed inset-0 bg-slate-900/70 items-center justify-center z-50 p-4">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-lg">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-200">
+                <h3 class="text-xl font-semibold text-sky-600">Thêm công việc mới</h3>
+                <button id="close-add-task-modal-btn" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+            </div>
+            <label for="add-modal-task-title" class="block text-sm font-medium text-slate-700 mb-1">Tiêu đề:</label>
+            <input type="text" id="add-modal-task-title" placeholder="Nhập tiêu đề..." class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm">
+            <label for="add-modal-task-desc" class="block text-sm font-medium text-slate-700 mb-1">Mô tả:</label>
+            <textarea id="add-modal-task-desc" placeholder="Mô tả chi tiết (tùy chọn)..." class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm min-h-[80px]"></textarea>
+            <label for="add-modal-task-status" class="block text-sm font-medium text-slate-700 mb-1">Trạng thái:</label>
+            <select id="add-modal-task-status" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm"> <option value="todo">Cần làm</option> <option value="inprogress">Đang làm</option> <option value="done">Hoàn thành</option> </select>
+            <label for="add-modal-task-priority" class="block text-sm font-medium text-slate-700 mb-1">Độ ưu tiên:</label>
+            <select id="add-modal-task-priority" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm"> <option value="medium">Trung bình</option> <option value="high">Cao</option> <option value="low">Thấp</option> </select>
+            <label for="add-modal-task-due-date" class="block text-sm font-medium text-slate-700 mb-1">Ngày đến hạn:</label>
+            <input type="date" id="add-modal-task-due-date" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm">
+            <label for="add-modal-task-assignee" class="block text-sm font-medium text-slate-700 mb-1">Người thực hiện:</label>
+            <input type="text" id="add-modal-task-assignee" placeholder="Tên người thực hiện..." class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm">
+            <label for="add-modal-task-tags" class="block text-sm font-medium text-slate-700 mb-1">Thẻ (cách nhau bởi dấu phẩy):</label>
+            <input type="text" id="add-modal-task-tags" placeholder="Ví dụ: bug, feature, urgent" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-4 text-sm">
+            <div class="modal-buttons flex justify-end gap-3 mt-5">
+                <button type="button" id="cancel-add-task-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2 px-4 rounded-md text-sm">Hủy</button>
+                <button type="button" id="save-new-task-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-medium py-2 px-4 rounded-md text-sm">Thêm Task</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit-task-modal" class="modal hidden fixed inset-0 bg-slate-900/70 items-center justify-center z-50 p-4">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-lg">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-200">
+                <h3 class="text-xl font-semibold text-sky-600">Chỉnh sửa công việc</h3>
+                <button id="close-edit-modal-btn" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+            </div>
+            <input type="hidden" id="edit-task-id">
+            <label for="edit-task-title" class="block text-sm font-medium text-slate-700 mb-1">Tiêu đề:</label>
+            <input type="text" id="edit-task-title" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm">
+            <label for="edit-task-description" class="block text-sm font-medium text-slate-700 mb-1">Mô tả:</label>
+            <textarea id="edit-task-description" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm min-h-[80px]"></textarea>
+            <label for="edit-task-status" class="block text-sm font-medium text-slate-700 mb-1">Trạng thái:</label>
+            <select id="edit-task-status" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm"> <option value="todo">Cần làm</option> <option value="inprogress">Đang làm</option> <option value="done">Hoàn thành</option> </select>
+            <label for="edit-task-priority" class="block text-sm font-medium text-slate-700 mb-1">Độ ưu tiên:</label>
+            <select id="edit-task-priority" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm"> <option value="low">Thấp</option> <option value="medium">Trung bình</option> <option value="high">Cao</option> </select>
+            <label for="edit-task-due-date" class="block text-sm font-medium text-slate-700 mb-1">Ngày đến hạn:</label>
+            <input type="date" id="edit-task-due-date" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm">
+            <label for="edit-task-assignee" class="block text-sm font-medium text-slate-700 mb-1">Người thực hiện:</label>
+            <input type="text" id="edit-task-assignee" placeholder="Tên người thực hiện..." class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm">
+            <label for="edit-task-tags" class="block text-sm font-medium text-slate-700 mb-1">Thẻ (cách nhau bởi dấu phẩy):</label>
+            <input type="text" id="edit-task-tags" placeholder="Ví dụ: bug, feature, urgent" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 mb-3 text-sm">
+            <div class="mt-3 mb-2"> <label for="edit-task-blocked" class="flex items-center text-sm font-medium text-slate-700"> <input type="checkbox" id="edit-task-blocked" class="h-4 w-4 text-sky-600 border-slate-300 rounded focus:ring-sky-500 mr-2"> Bị chặn? </label> </div>
+            <div class="block-reason-container mt-2" id="edit-block-reason-container" style="display: none;"> <label for="edit-task-block-reason" class="block text-sm font-medium text-slate-700 mb-1">Lý do bị chặn:</label> <textarea id="edit-task-block-reason" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm min-h-[60px]"></textarea> </div>
+            <div class="modal-buttons flex justify-end gap-3 mt-5">
+                <button type="button" id="cancel-edit-task-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2 px-4 rounded-md text-sm">Hủy</button>
+                <button type="button" id="save-edit-task-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-medium py-2 px-4 rounded-md text-sm">Lưu thay đổi</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="archived-tasks-modal" class="modal hidden fixed inset-0 bg-slate-900/70 items-center justify-center z-50 p-4">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-xl">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-200">
+                <h3 class="text-xl font-semibold text-sky-600">Công việc đã lưu trữ</h3>
+                <button id="close-archived-modal-btn" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+            </div>
+            <div id="archived-tasks-list" class="max-h-[60vh] overflow-y-auto">
+                {/* Content will be populated by JavaScript */}
+            </div>
+        </div>
+    </div>
+
+    <div id="custom-alert-overlay" class="hidden fixed inset-0 bg-slate-900/70 items-center justify-center z-[1060] p-4">
+        <div id="custom-alert-box" class="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm text-center">
+            <p id="custom-alert-message" class="text-slate-700 mb-4"></p>
+            <button id="custom-alert-ok-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-medium py-2 px-5 rounded-md text-sm">OK</button>
+        </div>
+    </div>
+
+    <div id="task-detail-bottom-sheet-overlay" class="fixed inset-0 bg-black/50 z-[1040] transition-opacity duration-300 opacity-0 hidden"></div>
+    <div id="task-detail-bottom-sheet" class="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl p-5 transform translate-y-full transition-transform duration-300 ease-out z-[1050] max-h-[85vh] overflow-y-auto hidden">
+        <h3 id="bs-task-title" class="text-xl font-semibold text-sky-600 mb-3 pb-2 border-b border-slate-200">Chi tiết công việc</h3>
+        <div id="bs-task-description" class="detail-item mb-3"><strong class="block text-slate-600 text-sm">Mô tả:</strong><p class="text-slate-700 text-sm leading-relaxed"></p></div>
+        <div id="bs-task-assignee" class="detail-item text-sm mb-2" style="display: none;"><strong>Người làm:</strong> <span class="text-slate-600"></span></div>
+        <div id="bs-task-due-date" class="detail-item text-sm mb-2" style="display: none;"><strong>Hạn:</strong> <span class="text-slate-600"></span></div>
+        <div id="bs-task-priority" class="detail-item text-sm mb-2" style="display: none;"><strong>Ưu tiên:</strong> <span class="text-slate-600"></span></div>
+        <div id="bs-task-tags" class="detail-item text-sm mb-2" style="display: none;"><strong>Thẻ:</strong> <span class="bs-tags-container mt-1 flex flex-wrap gap-1.5"></span></div>
+        <div id="bs-task-blocked-status" class="detail-item text-sm mb-2" style="display: none;"><strong>Trạng thái:</strong> <span class="bs-blocked-text text-red-600 font-semibold">BỊ CHẶN</span></div>
+        <div id="bs-task-block-reason" class="detail-item text-sm mb-2" style="display: none;"><strong class="block text-slate-600">Lý do chặn:</strong> <p class="text-slate-700"></p></div>
+        <div id="bs-task-created-at" class="detail-item text-xs text-slate-500 mt-3 pt-2 border-t border-slate-200" style="display: none;"><strong>Ngày tạo:</strong> <span></span></div>
+        <div id="bs-task-updated-at" class="detail-item text-xs text-slate-500" style="display: none;"><strong>Cập nhật cuối:</strong> <span></span></div>
+        
+        <div class="mt-4 pt-3 border-t border-slate-200">
+            <button id="bs-toggle-history-btn" class="text-sm text-sky-600 hover:text-sky-700 font-medium mb-2 w-full text-left">Xem Lịch Sử Thay Đổi</button>
+            <div id="bs-change-log-container" class="hidden">
+                 <h4 class="text-md font-semibold text-slate-700 mb-2">Lịch sử:</h4>
+                <div id="bs-change-log-list" class="space-y-2 text-xs text-slate-600 max-h-48 overflow-y-auto">
+                </div>
+            </div>
+        </div>
+
+        <button id="close-bottom-sheet-btn" class="w-full mt-5 bg-slate-500 hover:bg-slate-600 text-white font-medium py-2.5 px-4 rounded-md text-sm">Đóng</button>
+    </div>
+
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
+      import {
+          getFirestore, collection, addDoc, query, onSnapshot,
+          doc, updateDoc, deleteDoc, serverTimestamp, deleteField, arrayUnion
+      } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+
+      // Firebase Config (Keep yours)
+      const firebaseConfig = {
+        apiKey: "AIzaSyCWfij5n2cTb1jGkUreaLtwi7IENVxssbc",
+        authDomain: "testeng-7782.firebaseapp.com",
+        projectId: "testeng-7782",
+        storageBucket: "testeng-7782.firebasestorage.app",
+        messagingSenderId: "741104739298",
+        appId: "1:741104739298:web:fde4d379f83c139c33cfbb"
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+
+      // DOM Elements
+      const appContainer = document.querySelector('.app-container');
+      const kanbanColumns = document.querySelectorAll('.kanban-column');
+      const customAlertOverlay = document.getElementById('custom-alert-overlay');
+      const customAlertMessage = document.getElementById('custom-alert-message');
+      const customAlertOkBtn = document.getElementById('custom-alert-ok-btn');
+      const toggleFilterBarBtn = document.getElementById('toggle-filter-bar-btn');
+      const toggleFilterText = document.getElementById('toggle-filter-text');
+      const viewArchivedBtn = document.getElementById('view-archived-btn');
+      const filterBar = document.getElementById('filter-bar');
+      const searchTermInput = document.getElementById('search-term-input');
+      const filterPrioritySelect = document.getElementById('filter-priority');
+      const filterAssigneeSelect = document.getElementById('filter-assignee');
+      const filterTagSelect = document.getElementById('filter-tag');
+      const filterBlockedSelect = document.getElementById('filter-blocked');
+      const filterDueDateSelect = document.getElementById('filter-due-date');
+      const applyFiltersBtn = document.getElementById('apply-filters-btn');
+      const clearFiltersBtn = document.getElementById('clear-filters-btn');
+      const kanbanMobileTabs = document.getElementById('kanban-mobile-tabs');
+      const mobileTabButtons = document.querySelectorAll('.mobile-tab-button');
+      let currentActiveMobileColumnId = 'todo';
+      const fabAddTaskBtn = document.getElementById('fab-add-task');
+      const addTaskModal = document.getElementById('add-task-modal');
+      const closeAddTaskModalBtn = document.getElementById('close-add-task-modal-btn');
+      const cancelAddTaskBtn = document.getElementById('cancel-add-task-btn');
+      const saveNewTaskBtn = document.getElementById('save-new-task-btn');
+      const addModalTaskTitleInput = document.getElementById('add-modal-task-title');
+      const addModalTaskDescInput = document.getElementById('add-modal-task-desc');
+      const addModalTaskStatusInput = document.getElementById('add-modal-task-status');
+      const addModalTaskPriorityInput = document.getElementById('add-modal-task-priority');
+      const addModalTaskDueDateInput = document.getElementById('add-modal-task-due-date');
+      const addModalTaskAssigneeInput = document.getElementById('add-modal-task-assignee');
+      const addModalTaskTagsInput = document.getElementById('add-modal-task-tags');
+      const editTaskModal = document.getElementById('edit-task-modal');
+      const closeEditModalBtn = document.getElementById('close-edit-modal-btn');
+      const cancelEditTaskBtn = document.getElementById('cancel-edit-task-btn');
+      const saveEditTaskBtn = document.getElementById('save-edit-task-btn');
+      const editTaskIdInput = document.getElementById('edit-task-id');
+      const editTaskTitleInput = document.getElementById('edit-task-title');
+      const editTaskDescInput = document.getElementById('edit-task-description');
+      const editTaskStatusInput = document.getElementById('edit-task-status');
+      const editTaskPriorityInput = document.getElementById('edit-task-priority');
+      const editTaskDueDateInput = document.getElementById('edit-task-due-date');
+      const editTaskAssigneeInput = document.getElementById('edit-task-assignee');
+      const editTaskTagsInput = document.getElementById('edit-task-tags');
+      const editTaskBlockedCheckbox = document.getElementById('edit-task-blocked');
+      const editBlockReasonContainer = document.getElementById('edit-block-reason-container');
+      const editTaskBlockReasonInput = document.getElementById('edit-task-block-reason');
+      const archivedTasksModal = document.getElementById('archived-tasks-modal');
+      const closeArchivedModalBtn = document.getElementById('close-archived-modal-btn');
+      const archivedTasksList = document.getElementById('archived-tasks-list');
+
+      const bottomSheetOverlay = document.getElementById('task-detail-bottom-sheet-overlay');
+      const bottomSheet = document.getElementById('task-detail-bottom-sheet');
+      const bsTaskTitle = document.getElementById('bs-task-title');
+      const bsTaskDescription = document.getElementById('bs-task-description').querySelector('p');
+      const bsTaskAssignee = document.getElementById('bs-task-assignee');
+      const bsTaskDueDate = document.getElementById('bs-task-due-date');
+      const bsTaskPriority = document.getElementById('bs-task-priority');
+      const bsTaskTags = document.getElementById('bs-task-tags');
+      const bsTaskTagsContainer = bsTaskTags.querySelector('.bs-tags-container');
+      const bsTaskBlockedStatus = document.getElementById('bs-task-blocked-status');
+      const bsTaskBlockReason = document.getElementById('bs-task-block-reason').querySelector('p');
+      const bsTaskCreatedAt = document.getElementById('bs-task-created-at');
+      const bsTaskUpdatedAt = document.getElementById('bs-task-updated-at');
+      const closeBottomSheetBtn = document.getElementById('close-bottom-sheet-btn');
+      const bsToggleHistoryBtn = document.getElementById('bs-toggle-history-btn');
+      const bsChangeLogContainer = document.getElementById('bs-change-log-container');
+      const bsChangeLogList = document.getElementById('bs-change-log-list');
+
+
+      let draggedTask = null;
+      let currentEditingTaskId = null;
+      let projectId = ''; // Will be set from URL
+      let tasksCollectionPath = ''; // Will be set based on projectId
+
+      const priorityMap = { high: 'Cao', medium: 'Trung bình', low: 'Thấp' };
+      let currentTaskCounts = { todo: 0, inprogress: 0, done: 0 };
+      let allTasks = [];
+
+      // SVG Icons
+      const iconPinOutline = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 3.75V16.5L12 14.25L7.5 16.5V3.75m9 0H7.5A2.25 2.25 0 005.25 6v10.5A2.25 2.25 0 007.5 18.75h9A2.25 2.25 0 0018.75 16.5V6A2.25 2.25 0 0016.5 3.75z" /></svg>`;
+      const iconPinSolid = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M6.32 2.577a49.255 49.255 0 0111.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 01-1.085.67L12 18.089l-7.165 3.583A.75.75 0 013.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93z" clip-rule="evenodd" /></svg>`;
+      const iconEditPencil = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>`;
+      const iconArchiveBoxArrowDown = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M12 18.75v-7.5m0 0L9.75 13.5M12 11.25l2.25 2.25" /></svg>`;
+      const iconUnarchive = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 inline mr-1"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>`;
+      const iconArrowLeft = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>`;
+      const iconArrowRight = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>`;
+      const iconCheck = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>`;
+      const confettiParticles = [];
+
+
+      function showAlert(message) { customAlertMessage.textContent = message; customAlertOverlay.classList.remove('hidden'); customAlertOverlay.classList.add('flex'); }
+      customAlertOkBtn.addEventListener('click', () => { customAlertOverlay.classList.add('hidden'); customAlertOverlay.classList.remove('flex'); });
+
+      function formatDateForDisplay(dateString) {
+          if (!dateString) return 'N/A';
+          const date = new Date(dateString);
+          const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+          const correctedDate = new Date(date.getTime() + userTimezoneOffset);
+          return correctedDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      }
+      function formatDateTimeForDisplay(dateObj) {
+        if (!dateObj) return 'N/A';
+        return dateObj.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      }
+
+      function getTodayDateString() {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+
+      function openModal(modalElement) {
+        if (modalElement) {
+            modalElement.classList.remove('hidden');
+            modalElement.classList.add('flex');
+        } else {
+            console.error("Modal element not found for openModal:", modalElement);
+        }
+      }
+      function closeModal(modalElement) {
+        if (modalElement) {
+            modalElement.classList.add('hidden');
+            modalElement.classList.remove('flex');
+        } else {
+             console.error("Modal element not found for closeModal:", modalElement);
+        }
+      }
+
+      function openAddTaskModal() {
+        addModalTaskTitleInput.value = ''; addModalTaskDescInput.value = '';
+        addModalTaskStatusInput.value = currentActiveMobileColumnId || 'todo';
+        addModalTaskPriorityInput.value = 'medium';
+        addModalTaskDueDateInput.value = ''; addModalTaskAssigneeInput.value = ''; addModalTaskTagsInput.value = '';
+        openModal(addTaskModal);
+      }
+      function closeAddTaskModal() { closeModal(addTaskModal); }
+      fabAddTaskBtn.addEventListener('click', openAddTaskModal);
+      closeAddTaskModalBtn.addEventListener('click', closeAddTaskModal);
+      cancelAddTaskBtn.addEventListener('click', closeAddTaskModal);
+      saveNewTaskBtn.addEventListener('click', () => {
+          const title = addModalTaskTitleInput.value; const description = addModalTaskDescInput.value;
+          const status = addModalTaskStatusInput.value; const priority = addModalTaskPriorityInput.value;
+          const dueDate = addModalTaskDueDateInput.value; const assignee = addModalTaskAssigneeInput.value.trim();
+          const tags = addModalTaskTagsInput.value.trim();
+          addTaskToFirestore(title, description, status, priority, dueDate, assignee, tags);
+      });
+
+      editTaskBlockedCheckbox.addEventListener('change', function() {
+          editBlockReasonContainer.style.display = this.checked ? 'block' : 'none';
+          if (!this.checked) editTaskBlockReasonInput.value = '';
+      });
+      function openEditModal(task) {
+          currentEditingTaskId = task.id; editTaskIdInput.value = task.id;
+          editTaskTitleInput.value = task.title; editTaskDescInput.value = task.description || '';
+          editTaskStatusInput.value = task.status; editTaskPriorityInput.value = task.priority || 'medium';
+          editTaskDueDateInput.value = task.dueDate || ''; editTaskAssigneeInput.value = task.assignee || '';
+          editTaskTagsInput.value = Array.isArray(task.tags) ? task.tags.join(', ') : '';
+          editTaskBlockedCheckbox.checked = task.isBlocked || false;
+          editTaskBlockReasonInput.value = task.blockReason || '';
+          editBlockReasonContainer.style.display = editTaskBlockedCheckbox.checked ? 'block' : 'none';
+          openModal(editTaskModal);
+      }
+      function closeEditModal() { closeModal(editTaskModal); currentEditingTaskId = null; }
+      closeEditModalBtn.onclick = closeEditModal;
+      cancelEditTaskBtn.onclick = closeEditModal;
+      
+      saveEditTaskBtn.addEventListener('click', async () => {
+          if (!currentEditingTaskId) return;
+
+          const oldTaskData = allTasks.find(task => task.id === currentEditingTaskId);
+          if (!oldTaskData) {
+              showAlert("Lỗi: Không tìm thấy dữ liệu công việc cũ.");
+              return;
+          }
+
+          const updatedTitle = editTaskTitleInput.value.trim();
+          const updatedDescription = editTaskDescInput.value.trim();
+          const updatedStatus = editTaskStatusInput.value;
+          const updatedPriority = editTaskPriorityInput.value;
+          const updatedDueDate = editTaskDueDateInput.value;
+          const updatedAssignee = editTaskAssigneeInput.value.trim();
+          const updatedTagsString = editTaskTagsInput.value.trim();
+          const updatedTags = updatedTagsString ? updatedTagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
+          const isBlocked = editTaskBlockedCheckbox.checked;
+          const blockReason = isBlocked ? editTaskBlockReasonInput.value.trim() : "";
+
+          if (!updatedTitle) { showAlert("Tiêu đề không được để trống!"); return; }
+          if (isBlocked && !blockReason) { showAlert("Vui lòng nhập lý do bị chặn!"); return; }
+
+          const detailedChangesArray = [];
+          const trackableFields = {
+              title: updatedTitle, description: updatedDescription, status: updatedStatus,
+              priority: updatedPriority, dueDate: updatedDueDate, assignee: updatedAssignee,
+              tags: updatedTags, isBlocked: isBlocked, blockReason: blockReason
+          };
+
+          for (const field in trackableFields) {
+              let oldValue = oldTaskData[field];
+              let newValue = trackableFields[field];
+
+              if (field === 'tags') { 
+                  oldValue = Array.isArray(oldValue) ? oldValue.slice().sort() : [];
+                  newValue = Array.isArray(newValue) ? newValue.slice().sort() : [];
+                  if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+                      detailedChangesArray.push({ field, oldValue: oldTaskData[field] || [], newValue: trackableFields[field] });
+                  }
+              } else {
+                  oldValue = oldValue === undefined || oldValue === null ? "" : oldValue; 
+                  newValue = newValue === undefined || newValue === null ? "" : newValue;
+                  
+                  if (typeof oldValue === 'boolean' || typeof newValue === 'boolean') {
+                      if (Boolean(oldValue) !== Boolean(newValue)) {
+                          detailedChangesArray.push({ field, oldValue: Boolean(oldTaskData[field]), newValue: Boolean(trackableFields[field]) });
+                      }
+                  } else if (String(oldValue) !== String(newValue)) {
+                       detailedChangesArray.push({ field, oldValue: oldTaskData[field] || "", newValue: trackableFields[field] });
+                  }
+              }
+          }
+          
+          const updatePayload = {
+              title: updatedTitle, description: updatedDescription, status: updatedStatus,
+              priority: updatedPriority, dueDate: updatedDueDate, assignee: updatedAssignee,
+              tags: updatedTags, isBlocked: isBlocked, blockReason: blockReason,
+              updatedAt: serverTimestamp()
+          };
+
+          if (detailedChangesArray.length > 0) {
+              const changeLogEntry = {
+                  timestamp: new Date(), 
+                  userId: "System", 
+                  changes: detailedChangesArray
+              };
+              updatePayload.changeLog = arrayUnion(changeLogEntry);
+          }
+
+          try {
+              const taskRef = doc(db, tasksCollectionPath, currentEditingTaskId);
+              await updateDoc(taskRef, updatePayload);
+              showAlert("Cập nhật công việc thành công!"); closeEditModal();
+          } catch (error) { console.error("Error updating task:", error); showAlert("Lỗi cập nhật task: " + error.message); }
+      });
+      
+      function openArchivedTasksModal() {
+          const archivedTasks = allTasks.filter(task => task.isArchived === true).sort((a, b) => (b.archivedAt?.toMillis() || 0) - (a.archivedAt?.toMillis() || 0)); 
+          archivedTasksList.innerHTML = '';
+
+          if (archivedTasks.length === 0) {
+              archivedTasksList.innerHTML = '<p class="text-slate-500 text-center py-4">Không có công việc nào được lưu trữ.</p>';
+          } else {
+              archivedTasks.forEach(task => {
+                  const item = document.createElement('div');
+                  item.className = 'archived-task-item flex justify-between items-center p-3 border-b border-slate-200 hover:bg-slate-50';
+                  
+                  const infoDiv = document.createElement('div');
+                  const title = document.createElement('p');
+                  title.className = 'font-medium text-slate-700';
+                  title.textContent = task.title;
+                  infoDiv.appendChild(title);
+
+                  if (task.archivedAt && task.archivedAt.toDate) {
+                      const archivedDate = document.createElement('p');
+                      archivedDate.className = 'text-xs text-slate-500';
+                      archivedDate.textContent = `Lưu trữ ngày: ${formatDateForDisplay(task.archivedAt.toDate().toISOString().split('T')[0])}`;
+                      infoDiv.appendChild(archivedDate);
+                  }
+                  if (task.originalStatus) {
+                      const originalStatusText = document.createElement('p');
+                      originalStatusText.className = 'text-xs text-slate-500';
+                      let statusDisplayName = task.originalStatus;
+                      if(task.originalStatus === 'todo') statusDisplayName = 'Cần làm';
+                      else if(task.originalStatus === 'inprogress') statusDisplayName = 'Đang làm';
+                      else if(task.originalStatus === 'done') statusDisplayName = 'Hoàn thành';
+                      originalStatusText.textContent = `Trạng thái gốc: ${statusDisplayName}`;
+                      infoDiv.appendChild(originalStatusText);
+                  }
+                  item.appendChild(infoDiv);
+
+                  const actionsDiv = document.createElement('div');
+                  actionsDiv.className = 'flex gap-2';
+
+                  const unarchiveBtn = document.createElement('button');
+                  unarchiveBtn.className = 'bg-green-500 hover:bg-green-600 text-white text-xs font-medium py-1 px-2.5 rounded flex items-center';
+                  unarchiveBtn.innerHTML = iconUnarchive + 'Khôi phục';
+                  unarchiveBtn.title = "Khôi phục công việc";
+                  unarchiveBtn.onclick = () => unarchiveTask(task.id, task.originalStatus || 'todo');
+                  actionsDiv.appendChild(unarchiveBtn);
+                  
+                  item.appendChild(actionsDiv);
+                  archivedTasksList.appendChild(item);
+              });
+          }
+          openModal(archivedTasksModal);
+      }
+      function closeArchivedTasksModal() { closeModal(archivedTasksModal); }
+      viewArchivedBtn.addEventListener('click', openArchivedTasksModal);
+      closeArchivedModalBtn.addEventListener('click', closeArchivedTasksModal);
+
+      function openBottomSheet(taskData) {
+        console.log("Opening bottom sheet for task:", taskData);
+        bsTaskTitle.textContent = taskData.title || "Không có tiêu đề";
+        bsTaskDescription.textContent = taskData.description || '(Không có mô tả)';
+
+        bsTaskAssignee.style.display = taskData.assignee ? 'block' : 'none';
+        if(taskData.assignee) bsTaskAssignee.querySelector('span').textContent = taskData.assignee;
+
+        bsTaskDueDate.style.display = taskData.dueDate ? 'block' : 'none';
+        if(taskData.dueDate) {
+            const dueDateSpan = bsTaskDueDate.querySelector('span');
+            dueDateSpan.textContent = formatDateForDisplay(taskData.dueDate);
+            dueDateSpan.className = 'text-slate-600'; 
+            const today = getTodayDateString();
+            if (taskData.dueDate < today) {
+                dueDateSpan.classList.add('text-red-600', 'font-semibold');
+                dueDateSpan.textContent += " (Quá hạn)";
+            } else {
+                const todayDate = new Date(today); const dueDateObj = new Date(taskData.dueDate);
+                const diffTime = dueDateObj - todayDate; const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                if (diffDays === 0) {
+                    dueDateSpan.classList.add('text-amber-600', 'font-semibold');
+                    dueDateSpan.textContent += " (Hôm nay)";
+                } else if (diffDays === 1) {
+                    dueDateSpan.classList.add('text-amber-600', 'font-semibold');
+                    dueDateSpan.textContent += " (Ngày mai)";
+                }
+            }
+        }
+
+        bsTaskPriority.style.display = 'block';
+        bsTaskPriority.querySelector('span').textContent = priorityMap[taskData.priority || 'medium'];
+
+        bsTaskTags.style.display = (taskData.tags && taskData.tags.length > 0) ? 'block' : 'none';
+        if (taskData.tags && taskData.tags.length > 0) {
+            bsTaskTagsContainer.innerHTML = '';
+            taskData.tags.forEach(tagText => {
+                const tagSpan = document.createElement('span');
+                tagSpan.className = 'bs-tag bg-indigo-100 text-indigo-700 text-xs font-medium px-2 py-0.5 rounded-full';
+                tagSpan.textContent = tagText;
+                bsTaskTagsContainer.appendChild(tagSpan);
+            });
+        }
+
+        bsTaskBlockedStatus.style.display = taskData.isBlocked ? 'block' : 'none';
+        bsTaskBlockReason.parentElement.style.display = (taskData.isBlocked && taskData.blockReason) ? 'block' : 'none';
+        if (taskData.isBlocked && taskData.blockReason) bsTaskBlockReason.textContent = taskData.blockReason;
+
+
+        bsTaskCreatedAt.style.display = (taskData.createdAt && taskData.createdAt.toDate) ? 'block' : 'none';
+        if (taskData.createdAt && taskData.createdAt.toDate) {
+            bsTaskCreatedAt.querySelector('span').textContent = formatDateTimeForDisplay(taskData.createdAt.toDate());
+        }
+        
+        bsTaskUpdatedAt.style.display = (taskData.updatedAt && taskData.updatedAt.toDate && taskData.createdAt?.toMillis() !== taskData.updatedAt?.toMillis()) ? 'block' : 'none';
+        if (taskData.updatedAt && taskData.updatedAt.toDate && taskData.createdAt?.toMillis() !== taskData.updatedAt?.toMillis()) {
+             bsTaskUpdatedAt.querySelector('span').textContent = formatDateTimeForDisplay(taskData.updatedAt.toDate());
+        }
+        
+        bsChangeLogList.innerHTML = ''; 
+        if (taskData.changeLog && taskData.changeLog.length > 0) {
+            const sortedLog = [...taskData.changeLog].sort((a,b) => {
+                const timeA = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : (a.timestamp instanceof Date ? a.timestamp.getTime() : 0);
+                const timeB = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : (b.timestamp instanceof Date ? b.timestamp.getTime() : 0);
+                return timeB - timeA; 
+            });
+
+            sortedLog.forEach(logEntry => {
+                const logItem = document.createElement('div');
+                logItem.className = 'p-2 border-b border-slate-100 last:border-b-0';
+                
+                const time = logEntry.timestamp?.toDate ? formatDateTimeForDisplay(logEntry.timestamp.toDate()) : (logEntry.timestamp instanceof Date ? formatDateTimeForDisplay(logEntry.timestamp) : 'Không rõ thời gian');
+                const user = logEntry.userId || 'Không rõ người dùng';
+                
+                let changesHtml = `<p class="text-xs text-slate-500 mb-1">${time} - bởi ${user}:</p><ul class="list-disc list-inside pl-2 space-y-0.5">`;
+                logEntry.changes.forEach(change => {
+                    let oldValueDisplay = typeof change.oldValue === 'object' ? JSON.stringify(change.oldValue) : String(change.oldValue);
+                    let newValueDisplay = typeof change.newValue === 'object' ? JSON.stringify(change.newValue) : String(change.newValue);
+                    if (oldValueDisplay.length > 50) oldValueDisplay = oldValueDisplay.substring(0, 50) + '...';
+                    if (newValueDisplay.length > 50) newValueDisplay = newValueDisplay.substring(0, 50) + '...';
+
+                    changesHtml += `<li class="text-xs"><span class="font-medium text-slate-600">${change.field}:</span> <span class="text-slate-500 line-through">${oldValueDisplay}</span> → <span class="text-slate-700">${newValueDisplay}</span></li>`;
+                });
+                changesHtml += `</ul>`;
+                logItem.innerHTML = changesHtml;
+                bsChangeLogList.appendChild(logItem);
+            });
+            bsToggleHistoryBtn.style.display = 'block';
+            bsChangeLogContainer.classList.add('hidden'); 
+            bsToggleHistoryBtn.textContent = 'Xem Lịch Sử Thay Đổi';
+        } else {
+            bsChangeLogList.innerHTML = '<p class="text-xs text-slate-500 italic">Không có lịch sử thay đổi nào.</p>';
+            bsToggleHistoryBtn.style.display = 'none'; 
+            bsChangeLogContainer.classList.remove('hidden','visible');
+        }
+
+
+        bottomSheetOverlay.classList.remove('hidden', 'opacity-0');
+        bottomSheetOverlay.classList.add('opacity-100');
+        bottomSheet.classList.remove('hidden', 'translate-y-full');
+        bottomSheet.classList.add('translate-y-0');
+      }
+
+      function closeBottomSheet() {
+        bottomSheet.classList.add('translate-y-full');
+        bottomSheet.classList.remove('translate-y-0');
+        bottomSheetOverlay.classList.add('opacity-0');
+        setTimeout(() => {
+            bottomSheetOverlay.classList.add('hidden');
+            bottomSheet.classList.add('hidden');
+            bsChangeLogContainer.classList.add('hidden'); 
+            bsChangeLogContainer.classList.remove('visible');
+        }, 300);
+      }
+      closeBottomSheetBtn.addEventListener('click', closeBottomSheet);
+      bottomSheetOverlay.addEventListener('click', closeBottomSheet);
+      bsToggleHistoryBtn.addEventListener('click', () => {
+          bsChangeLogContainer.classList.toggle('visible');
+          bsChangeLogContainer.classList.toggle('hidden');
+          if (bsChangeLogContainer.classList.contains('visible')) {
+              bsToggleHistoryBtn.textContent = 'Ẩn Lịch Sử Thay Đổi';
+          } else {
+              bsToggleHistoryBtn.textContent = 'Xem Lịch Sử Thay Đổi';
+          }
+      });
+
+
+      window.onclick = function(event) {
+          if (event.target == editTaskModal) closeEditModal();
+          if (event.target == addTaskModal) closeAddTaskModal();
+          if (event.target == archivedTasksModal) closeArchivedTasksModal();
+          if (event.target == customAlertOverlay) { customAlertOverlay.classList.add('hidden'); customAlertOverlay.classList.remove('flex');}
+      };
+
+      function updateColumnUI() {
+          kanbanColumns.forEach(column => {
+              const status = column.dataset.status;
+              const countBadge = column.querySelector('.task-count-badge');
+              const wipLimit = parseInt(column.dataset.wipLimit, 10);
+              
+              let unblockedTaskCountInColumn = 0;
+              allTasks.filter(t => !t.isArchived).forEach(task => { 
+                  if (task.status === status && !task.isBlocked) {
+                      unblockedTaskCountInColumn++;
+                  }
+              });
+
+              if (countBadge) {
+                countBadge.textContent = allTasks.filter(t => t.status === status && !t.isArchived).length || 0; 
+              }
+              
+              column.classList.remove('column-at-wip-limit'); 
+              if (wipLimit !== -1 && unblockedTaskCountInColumn >= wipLimit) {
+                  column.classList.add('column-at-wip-limit'); 
+              }
+          });
+      }
+
+      async function addTaskToFirestore(title, description, status, priority, dueDate, assignee, tagsString) {
+        if (!title.trim()) { showAlert("Tiêu đề không được để trống!"); return; }
+        const columnElement = document.getElementById(status);
+        if (!columnElement) { showAlert(`Lỗi: Không tìm thấy cột cho trạng thái "${status}".`); return; }
+        
+        const wipLimit = parseInt(columnElement.dataset.wipLimit, 10);
+        if (wipLimit !== -1) {
+            let unblockedTasksInColumn = 0;
+            allTasks.filter(t => !t.isArchived).forEach(task => {
+                if (task.status === status && !task.isBlocked) {
+                    unblockedTasksInColumn++;
+                }
+            });
+            if (unblockedTasksInColumn >= wipLimit) {
+                const h2Element = columnElement.querySelector('.column-header h2');
+                let columnName = status;
+                if (h2Element && h2Element.offsetParent !== null) columnName = h2Element.textContent.trim();
+                else {
+                    const tabButton = document.getElementById(`tab-${status}`);
+                    if (tabButton) columnName = Array.from(tabButton.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent.trim()).join('') || status;
+                }
+                showAlert(`Cột "${columnName}" đã đạt giới hạn WIP cho công việc bình thường (${wipLimit}).`); return;
+            }
+        }
+
+        const tagsArray = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
+        try {
+            await addDoc(collection(db, tasksCollectionPath), { // Use dynamic path
+                title, description, status, priority, dueDate, assignee,
+                tags: tagsArray, isBlocked: false, blockReason: "", 
+                createdAt: serverTimestamp(), 
+                updatedAt: serverTimestamp(), 
+                isPinned: false, order: Date.now(), isArchived: false,
+                changeLog: [] 
+            });
+            showAlert("Thêm công việc mới thành công!"); closeAddTaskModal();
+        } catch (e) { console.error("Error adding task: ", e); showAlert("Lỗi thêm task: " + e.message); }
+      }
+      
+      async function archiveTask(taskId, currentStatus) {
+          if (!taskId) return;
+          const taskRef = doc(db, tasksCollectionPath, taskId); // Use dynamic path
+          try {
+              await updateDoc(taskRef, {
+                  isArchived: true,
+                  archivedAt: serverTimestamp(),
+                  originalStatus: currentStatus,
+                  updatedAt: serverTimestamp() 
+              });
+              showAlert("Đã lưu trữ công việc.");
+          } catch (error) {
+              console.error("Error archiving task:", error);
+              showAlert("Lỗi khi lưu trữ công việc: " + error.message);
+          }
+      }
+
+      async function unarchiveTask(taskId, originalStatus) {
+          if (!taskId) return;
+          const taskRef = doc(db, tasksCollectionPath, taskId); // Use dynamic path
+          try {
+              await updateDoc(taskRef, {
+                  isArchived: false,
+                  status: originalStatus || 'todo', 
+                  order: Date.now(), 
+                  archivedAt: deleteField(), 
+                  originalStatus: deleteField(),
+                  updatedAt: serverTimestamp() 
+              });
+              showAlert("Đã khôi phục công việc.");
+              closeArchivedTasksModal(); 
+          } catch (error) {
+              console.error("Error unarchiving task:", error);
+              showAlert("Lỗi khi khôi phục công việc: " + error.message);
+          }
+      }
+
+      function createTaskCard(taskData) {
+          const taskCard = document.createElement('div');
+          taskCard.className = `task-card bg-white border border-slate-100 rounded-md p-3 shadow hover:shadow-md transition-shadow flex flex-col relative border-l-4 border-priority-${taskData.priority || 'medium'}`;
+          if (taskData.isPinned) taskCard.classList.add('task-pinned', '!border-amber-300', '!bg-amber-50');
+          
+          if (taskData.isBlocked) {
+              taskCard.classList.add('blocked', '!bg-red-50', '!border-red-300', '!border-l-red-700');
+          }
+
+          taskCard.setAttribute('draggable', 'true');
+          taskCard.dataset.id = taskData.id;
+          taskCard.dataset.status = taskData.status;
+
+          // Card Header
+          const cardHeader = document.createElement('div');
+          cardHeader.className = 'task-card-header flex justify-between items-start mb-1.5';
+          const titleText = document.createElement('p');
+          titleText.className = 'task-card-title-text text-sm font-semibold text-slate-800 flex-grow cursor-pointer line-clamp-2 leading-tight';
+          titleText.textContent = taskData.title;
+          titleText.onclick = () => openBottomSheet(taskData); 
+          cardHeader.appendChild(titleText);
+
+          const cardActions = document.createElement('div');
+          cardActions.className = 'task-card-actions flex items-center gap-1 ml-2 flex-shrink-0';
+          
+          const pinButton = document.createElement('button');
+          pinButton.className = `pin-btn p-1 rounded hover:bg-slate-200 ${taskData.isPinned ? 'text-amber-500' : 'text-slate-400'}`;
+          pinButton.innerHTML = taskData.isPinned ? iconPinSolid : iconPinOutline;
+          pinButton.title = taskData.isPinned ? "Bỏ ghim" : "Ghim";
+          pinButton.onclick = (e) => { e.stopPropagation(); togglePinTask(taskData); };
+          cardActions.appendChild(pinButton);
+
+          const editButton = document.createElement('button'); 
+          editButton.className = 'p-1 rounded text-slate-400 hover:bg-slate-200 hover:text-slate-600';
+          editButton.innerHTML = iconEditPencil; 
+          editButton.title = "Sửa công việc";
+          editButton.onclick = (e) => { e.stopPropagation(); openEditModal(taskData); }; 
+          cardActions.appendChild(editButton);
+          
+          if (taskData.status === 'done' && !taskData.isArchived) { 
+              const archiveButton = document.createElement('button');
+              archiveButton.className = 'p-1 rounded text-slate-400 hover:bg-slate-200 hover:text-purple-600';
+              archiveButton.innerHTML = iconArchiveBoxArrowDown;
+              archiveButton.title = "Lưu trữ công việc";
+              archiveButton.onclick = (e) => { e.stopPropagation(); archiveTask(taskData.id, taskData.status); }; 
+              cardActions.appendChild(archiveButton);
+          }
+
+
+          cardHeader.appendChild(cardActions);
+          taskCard.appendChild(cardHeader);
+
+          if (taskData.description && taskData.description.trim() !== '') {
+            const descSnippet = document.createElement('p');
+            descSnippet.className = 'task-card-description-snippet text-xs text-slate-600 mt-0.5 mb-1.5 line-clamp-2 leading-snug';
+            descSnippet.textContent = taskData.description;
+            taskCard.appendChild(descSnippet);
+          }
+          
+          if (taskData.isBlocked) {
+            const blockedCardIndicator = document.createElement('span');
+            blockedCardIndicator.className = 'self-start mt-1.5 task-blocked-indicator px-2 py-0.5 rounded-full text-xs bg-red-600 text-white font-semibold flex items-center';
+            blockedCardIndicator.innerHTML = `<svg class="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12zm-1-5a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1zm1-4a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" /></svg>CHẶN`;
+            taskCard.appendChild(blockedCardIndicator);
+          }
+
+          const minimalIndicators = document.createElement('div');
+          minimalIndicators.className = 'task-card-minimal-indicators flex flex-wrap gap-x-3 gap-y-1 items-center text-xs text-slate-500 mt-1.5';
+          if (taskData.assignee) {
+              const assigneeIndicator = document.createElement('span');
+              assigneeIndicator.className = 'flex items-center';
+              assigneeIndicator.innerHTML = `<svg class="w-3.5 h-3.5 mr-1 text-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-5.5-2.5a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0zM10 12a5.99 5.99 0 00-4.793 2.39A6.483 6.483 0 0010 16.5a6.483 6.483 0 004.793-2.11A5.99 5.99 0 0010 12z" clip-rule="evenodd" /></svg>`;
+              assigneeIndicator.appendChild(document.createTextNode(taskData.assignee));
+              minimalIndicators.appendChild(assigneeIndicator);
+          }
+          if (taskData.dueDate) {
+              const today = getTodayDateString(); const dueDate = taskData.dueDate;
+              let dueDateIndicatorText = ''; let dueDateClasses = 'task-due-date-indicator px-1.5 py-0.5 rounded text-xs flex items-center';
+              let dateIcon = `<svg class="w-3.5 h-3.5 mr-1 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-3.75h.008v.008H12v-.008z" /></svg>`;
+              if (dueDate < today) {
+                  dueDateIndicatorText = `${formatDateForDisplay(dueDate)} (Quá hạn)`;
+                  dueDateClasses += ' bg-red-100 text-red-700';
+              } else {
+                  const todayDate = new Date(today); const dueDateObj = new Date(dueDate);
+                  const diffTime = dueDateObj - todayDate; const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                  if (diffDays === 0) { dueDateIndicatorText = "Hôm nay"; dueDateClasses += ' bg-amber-100 text-amber-700';}
+                  else if (diffDays === 1) { dueDateIndicatorText = "Ngày mai"; dueDateClasses += ' bg-amber-100 text-amber-700';}
+              }
+              if (dueDateIndicatorText) {
+                  const dueDateIndicator = document.createElement('span');
+                  dueDateIndicator.className = dueDateClasses;
+                  dueDateIndicator.innerHTML = dateIcon + dueDateIndicatorText;
+                  minimalIndicators.appendChild(dueDateIndicator);
+              }
+          }
+          const priorityBadge = document.createElement('span');
+          priorityBadge.className = `priority-indicator-badge px-1.5 py-0.5 rounded text-xs text-white bg-priority-${taskData.priority || 'medium'} ml-auto`;
+          priorityBadge.textContent = priorityMap[taskData.priority || 'medium'];
+          minimalIndicators.appendChild(priorityBadge);
+          if (minimalIndicators.hasChildNodes()) taskCard.appendChild(minimalIndicators);
+
+          const cardFooter = document.createElement('div');
+          cardFooter.className = 'task-card-footer mt-2 pt-1.5 border-t border-slate-200 flex justify-between items-center';
+          const moveActions = document.createElement('div');
+          moveActions.className = 'task-move-actions flex gap-1.5'; 
+          if (taskData.status !== 'todo') {
+              const moveToTodoBtn = document.createElement('button');
+              moveToTodoBtn.innerHTML = iconArrowLeft; moveToTodoBtn.title = "Chuyển sang Cần làm";
+              moveToTodoBtn.className = 'move-btn-todo p-1.5 rounded bg-slate-100 hover:bg-red-100 border border-slate-200 hover:border-red-300 text-red-600';
+              moveToTodoBtn.onclick = (e) => { e.stopPropagation(); updateTaskStatusInFirestore(taskData.id, 'todo', taskData.status); };
+              moveActions.appendChild(moveToTodoBtn);
+          }
+          if (taskData.status !== 'inprogress') {
+              const moveToInProgressBtn = document.createElement('button');
+              moveToInProgressBtn.innerHTML = (taskData.status === 'todo') ? iconArrowRight : iconArrowLeft;
+              moveToInProgressBtn.title = "Chuyển sang Đang làm";
+              moveToInProgressBtn.className = 'move-btn-inprogress p-1.5 rounded bg-slate-100 hover:bg-amber-100 border border-slate-200 hover:border-amber-300 text-amber-600';
+              moveToInProgressBtn.onclick = (e) => { e.stopPropagation(); updateTaskStatusInFirestore(taskData.id, 'inprogress', taskData.status); };
+              moveActions.appendChild(moveToInProgressBtn);
+          }
+          if (taskData.status !== 'done') {
+              const moveToDoneBtn = document.createElement('button');
+              moveToDoneBtn.innerHTML = iconCheck; moveToDoneBtn.title = "Hoàn thành";
+              moveToDoneBtn.className = 'move-btn-done p-1.5 rounded bg-slate-100 hover:bg-green-100 border border-slate-200 hover:border-green-300 text-green-600';
+              moveToDoneBtn.onclick = (e) => { e.stopPropagation(); updateTaskStatusInFirestore(taskData.id, 'done', taskData.status); };
+              moveActions.appendChild(moveToDoneBtn);
+          }
+          cardFooter.appendChild(moveActions);
+          
+          const timestamp = document.createElement('span');
+          timestamp.className = 'task-timestamp text-xs text-slate-400';
+          if (taskData.updatedAt && taskData.updatedAt.toDate && taskData.createdAt?.toMillis() !== taskData.updatedAt?.toMillis()) {
+             timestamp.textContent = `Sửa: ${formatDateForDisplay(taskData.updatedAt.toDate().toISOString().split('T')[0])}`;
+          } else if (taskData.createdAt && taskData.createdAt.toDate) {
+             timestamp.textContent = `Tạo: ${formatDateForDisplay(taskData.createdAt.toDate().toISOString().split('T')[0])}`;
+          } else {
+             timestamp.textContent = 'N/A';
+          }
+          cardFooter.appendChild(timestamp);
+          taskCard.appendChild(cardFooter);
+
+          taskCard.addEventListener('dragstart', handleDragStart);
+          taskCard.addEventListener('dragend', handleDragEnd);
+          return taskCard;
+      }
+      async function togglePinTask(taskData) {
+        if (!taskData || !taskData.id) return;
+        const newPinnedState = !taskData.isPinned;
+        try {
+            const taskRef = doc(db, tasksCollectionPath, taskData.id); // Use dynamic path
+            await updateDoc(taskRef, { 
+                isPinned: newPinnedState,
+                updatedAt: serverTimestamp() 
+            });
+        } catch (error) {
+            console.error("Error toggling pin state:", error);
+            showAlert("Lỗi khi ghim/bỏ ghim công việc.");
+        }
+      }
+
+      async function updateTaskStatusInFirestore(taskId, newStatus, oldStatus) {
+          const columnElement = document.getElementById(newStatus);
+          if (!columnElement) { showAlert(`Lỗi: Không tìm thấy cột cho trạng thái "${newStatus}".`); return false; }
+          
+          const wipLimit = parseInt(columnElement.dataset.wipLimit, 10);
+          if (wipLimit !== -1 && newStatus !== oldStatus) { 
+            let unblockedTasksInTargetColumn = 0;
+            allTasks.filter(t => !t.isArchived).forEach(task => {
+                if (task.status === newStatus && !task.isBlocked) {
+                    unblockedTasksInTargetColumn++;
+                }
+            });
+
+            const taskBeingMoved = allTasks.find(t => t.id === taskId);
+            const isTaskBeingMovedUnblocked = taskBeingMoved && !taskBeingMoved.isBlocked;
+
+            if (isTaskBeingMovedUnblocked && unblockedTasksInTargetColumn >= wipLimit) {
+                 const h2Element = columnElement.querySelector('.column-header h2');
+                 let columnName = newStatus;
+                 if (h2Element && h2Element.offsetParent !== null) {
+                     columnName = h2Element.textContent.trim();
+                 } else {
+                     const tabButton = document.getElementById(`tab-${newStatus}`);
+                     if (tabButton) {
+                         columnName = Array.from(tabButton.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent.trim()).join('') || newStatus;
+                     }
+                 }
+                 showAlert(`Cột "${columnName}" đã đạt giới hạn WIP cho công việc bình thường (${wipLimit}). Không thể chuyển task.`); return false;
+            }
+          }
+          
+          try {
+              const taskRef = doc(db, tasksCollectionPath, taskId); // Use dynamic path
+              const taskToUpdate = allTasks.find(t => t.id === taskId);
+              
+              const updatePayload = { 
+                  status: newStatus, 
+                  updatedAt: serverTimestamp(), 
+                  isPinned: (newStatus === 'done' ? false : (taskToUpdate?.isPinned || false)),
+                  order: Date.now()
+              };
+
+              if (oldStatus !== newStatus) {
+                 const changeLogEntry = {
+                      timestamp: new Date(), 
+                      userId: "System", 
+                      changes: [{ field: "status", oldValue: oldStatus, newValue: newStatus }]
+                  };
+                  updatePayload.changeLog = arrayUnion(changeLogEntry);
+              }
+
+              await updateDoc(taskRef, updatePayload);
+              
+              if (newStatus === 'done' && oldStatus !== 'done') {
+                  triggerConfetti(); 
+              }
+              return true;
+          } catch (error) { console.error("Error updating task status:", error); showAlert("Lỗi cập nhật trạng thái task: " + error.message); return false; }
+      }
+
+      function handleDragStart(event) {
+          draggedTask = event.target.closest('.task-card');
+          if (!draggedTask) return;
+          event.dataTransfer.setData('text/plain', draggedTask.dataset.id);
+          setTimeout(() => { if(draggedTask) draggedTask.classList.add('opacity-50', 'border-dashed', 'border-sky-500'); }, 0);
+      }
+      function handleDragEnd(event) {
+          if (draggedTask) draggedTask.classList.remove('opacity-50', 'border-dashed', 'border-sky-500');
+          draggedTask = null;
+          kanbanColumns.forEach(col => {
+            const tasksContainer = col.querySelector('.tasks-container');
+            if(tasksContainer) tasksContainer.classList.remove('bg-sky-100/50', 'border-sky-300', 'border-dashed');
+          });
+      }
+      kanbanColumns.forEach(column => {
+          const tasksContainer = column.querySelector('.tasks-container');
+          tasksContainer.addEventListener('dragover', (event) => {
+              event.preventDefault();
+              if (!draggedTask) return;
+              tasksContainer.classList.add('bg-sky-100/50', 'border-sky-300', 'border-dashed');
+              const targetColumnEl = column;
+              const targetStatus = targetColumnEl.dataset.status;
+              const wipLimit = parseInt(targetColumnEl.dataset.wipLimit, 10);
+              
+              let unblockedTasksInTargetColumn = 0;
+              allTasks.filter(t => !t.isArchived).forEach(task => {
+                  if (task.status === targetStatus && !task.isBlocked && task.id !== draggedTask.dataset.id) { 
+                      unblockedTasksInTargetColumn++;
+                  }
+              });
+              const taskBeingDraggedData = allTasks.find(t => t.id === draggedTask.dataset.id);
+              const isDraggedTaskUnblocked = taskBeingDraggedData && !taskBeingDraggedData.isBlocked;
+
+              if (draggedTask.dataset.status !== targetStatus && wipLimit !== -1 && isDraggedTaskUnblocked && unblockedTasksInTargetColumn >= wipLimit) {
+                  event.dataTransfer.dropEffect = 'none';
+                  tasksContainer.classList.add('border-red-400', 'bg-red-100/50');
+              } else {
+                  event.dataTransfer.dropEffect = 'move';
+                  tasksContainer.classList.remove('border-red-400', 'bg-red-100/50');
+              }
+          });
+          tasksContainer.addEventListener('dragleave', (event) => {
+              tasksContainer.classList.remove('bg-sky-100/50', 'border-sky-300', 'border-dashed', 'border-red-400', 'bg-red-100/50');
+          });
+          tasksContainer.addEventListener('drop', async (event) => {
+              event.preventDefault();
+              if (!draggedTask) return;
+              tasksContainer.classList.remove('bg-sky-100/50', 'border-sky-300', 'border-dashed', 'border-red-400', 'bg-red-100/50');
+              const targetColumnEl = column;
+              const taskId = draggedTask.dataset.id;
+              const oldStatus = draggedTask.dataset.status;
+              const newStatus = targetColumnEl.dataset.status;
+
+              if (oldStatus !== newStatus) {
+                  await updateTaskStatusInFirestore(taskId, newStatus, oldStatus); 
+              } else { 
+                  const mouseY = event.clientY;
+                  const draggedTaskData = allTasks.find(t => t.id === taskId);
+                  if (!draggedTaskData) { console.error("Dragged task data not found for reorder"); return; }
+                  const draggedIsPinned = draggedTaskData.isPinned;
+
+                  const siblingTaskDataInOrder = allTasks.filter(task => 
+                      !task.isArchived &&
+                      task.status === newStatus && 
+                      task.id !== taskId &&
+                      task.isPinned === draggedIsPinned
+                  ).sort((a,b) => a.order - b.order); 
+
+                  let nextTaskData = null;
+                  for (const sibling of siblingTaskDataInOrder) {
+                      const siblingElement = targetColumnEl.querySelector(`.tasks-container .task-card[data-id="${sibling.id}"]`);
+                      if (siblingElement) {
+                          const rect = siblingElement.getBoundingClientRect();
+                          if (mouseY < rect.top + rect.height / 2) {
+                              nextTaskData = sibling;
+                              break;
+                          }
+                      }
+                  }
+
+                  let newOrder;
+                  if (nextTaskData) {
+                      const nextOrder = nextTaskData.order;
+                      const indexOfNext = siblingTaskDataInOrder.indexOf(nextTaskData);
+                      if (indexOfNext === 0) {
+                          newOrder = nextOrder - 1000; 
+                      } else {
+                          const prevTaskData = siblingTaskDataInOrder[indexOfNext - 1];
+                          newOrder = (prevTaskData.order + nextOrder) / 2;
+                      }
+                  } else {
+                      if (siblingTaskDataInOrder.length > 0) {
+                          newOrder = siblingTaskDataInOrder[siblingTaskDataInOrder.length - 1].order + 1000;
+                      } else { 
+                          newOrder = Date.now();
+                      }
+                  }
+
+                  if (draggedTaskData.order !== newOrder) {
+                    await updateDoc(doc(db, tasksCollectionPath, taskId), { // Use dynamic path
+                        order: newOrder, 
+                        updatedAt: serverTimestamp() 
+                    });
+                  }
+              }
+          });
+      });
+
+      toggleFilterBarBtn.addEventListener('click', () => {
+          filterBar.classList.toggle('filter-bar-visible');
+          const buttonTextSpan = toggleFilterBarBtn.querySelector('#toggle-filter-text');
+          if (filterBar.classList.contains('filter-bar-visible')) {
+              if(buttonTextSpan) buttonTextSpan.textContent = 'Ẩn Bộ Lọc';
+          } else {
+              if(buttonTextSpan) buttonTextSpan.textContent = 'Hiện Bộ Lọc';
+          }
+      });
+      function populateFilterOptions() {
+          const activeTasks = allTasks.filter(task => !task.isArchived);
+          const assignees = new Set(); const tags = new Set();
+          activeTasks.forEach(task => {
+              if (task.assignee) assignees.add(task.assignee);
+              if (task.tags && Array.isArray(task.tags)) task.tags.forEach(tag => tags.add(tag));
+          });
+          filterAssigneeSelect.innerHTML = '<option value="">Tất cả người thực hiện</option>';
+          Array.from(assignees).sort().forEach(assignee => {
+              const option = document.createElement('option'); option.value = assignee; option.textContent = assignee;
+              filterAssigneeSelect.appendChild(option);
+          });
+          filterTagSelect.innerHTML = '<option value="">Tất cả thẻ</option>';
+          Array.from(tags).sort().forEach(tag => {
+              const option = document.createElement('option'); option.value = tag; option.textContent = tag;
+              filterTagSelect.appendChild(option);
+          });
+      }
+      function applyAllFilters() {
+          const searchTerm = searchTermInput.value.toLowerCase(); const selectedPriority = filterPrioritySelect.value;
+          const selectedAssignee = filterAssigneeSelect.value; const selectedTag = filterTagSelect.value;
+          const selectedBlocked = filterBlockedSelect.value; const selectedDueDate = filterDueDateSelect.value;
+          
+          const filteredTasks = allTasks.filter(task => {
+              if (task.isArchived) return false; 
+              if (searchTerm && !task.title.toLowerCase().includes(searchTerm)) return false;
+              if (selectedPriority && task.priority !== selectedPriority) return false;
+              if (selectedAssignee && task.assignee !== selectedAssignee) return false;
+              if (selectedTag && (!task.tags || !task.tags.includes(selectedTag))) return false;
+              if (selectedBlocked) {
+                  if (selectedBlocked === "yes" && !task.isBlocked) return false;
+                  if (selectedBlocked === "no" && task.isBlocked) return false;
+              }
+              if (selectedDueDate) {
+                  const today = new Date(getTodayDateString()); today.setHours(0,0,0,0);
+                  if (selectedDueDate === "noduedate") { if (task.dueDate) return false; }
+                  else if (!task.dueDate) { return false; }
+                  else {
+                      const taskDueDate = new Date(task.dueDate); taskDueDate.setHours(0,0,0,0);
+                      if (selectedDueDate === "overdue") { if (taskDueDate >= today) return false; }
+                      else if (selectedDueDate === "today") { if (taskDueDate.getTime() !== today.getTime()) return false; }
+                      else if (selectedDueDate === "next7days") {
+                          const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 7);
+                          if (taskDueDate < today || taskDueDate > nextWeek) return false;
+                      }
+                  }
+              }
+              return true;
+          });
+          renderFilteredTasks(filteredTasks);
+      }
+      function renderFilteredTasks(tasksToRender) {
+          kanbanColumns.forEach(column => {
+              const container = column.querySelector('.tasks-container');
+              container.innerHTML = ''; container.classList.remove('empty', 'border-2', 'border-dashed', 'border-slate-300', 'rounded-md', 'p-4', 'mt-2.5');
+          });
+          currentTaskCounts = { todo: 0, inprogress: 0, done: 0 }; 
+          tasksToRender.forEach((taskData) => { 
+              if (!taskData.status || !currentTaskCounts.hasOwnProperty(taskData.status)) taskData.status = 'todo';
+              currentTaskCounts[taskData.status]++; 
+              const taskCardElement = createTaskCard(taskData);
+              const columnContainer = document.getElementById(taskData.status)?.querySelector('.tasks-container');
+              if (columnContainer) columnContainer.appendChild(taskCardElement);
+              else console.warn(`Column container for status "${taskData.status}" not found.`);
+          });
+
+          const emptyIconSvg = `<svg class="empty-icon w-10 h-10 text-slate-400 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>`;
+          let hasActiveFilters = searchTermInput.value || filterPrioritySelect.value || filterAssigneeSelect.value || filterTagSelect.value || filterBlockedSelect.value || filterDueDateSelect.value;
+          kanbanColumns.forEach(column => {
+              const status = column.dataset.status;
+              const container = column.querySelector('.tasks-container');
+              if (currentTaskCounts[status] === 0) { 
+                  let message;
+                  const columnTitleElement = column.querySelector('.column-header h2');
+                  const tabButton = document.getElementById(`tab-${status}`);
+                  let columnDisplayName = status;
+                  if (columnTitleElement && columnTitleElement.offsetParent !== null) { 
+                      columnDisplayName = columnTitleElement.textContent.trim();
+                  } else if (tabButton) { 
+                     columnDisplayName = Array.from(tabButton.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent.trim()).join('') || status;
+                  }
+                  if (hasActiveFilters) message = `Không có công việc nào khớp bộ lọc.`;
+                  else message = `Chưa có công việc nào. Nhấn "+" để thêm.`;
+                  container.innerHTML = `${emptyIconSvg}<p class="text-sm text-slate-500">${message}</p>`;
+                  container.classList.add('empty', 'border-2', 'border-dashed', 'border-slate-300', 'rounded-md', 'p-4', 'mt-2.5');
+              }
+          });
+          updateColumnUI(); handleMobileLayout();
+      }
+      applyFiltersBtn.addEventListener('click', applyAllFilters);
+      clearFiltersBtn.addEventListener('click', () => {
+          searchTermInput.value = ''; filterPrioritySelect.value = ''; filterAssigneeSelect.value = '';
+          filterTagSelect.value = ''; filterBlockedSelect.value = ''; filterDueDateSelect.value = '';
+          applyAllFilters();
+      });
+
+      function setActiveMobileColumn(status) {
+          currentActiveMobileColumnId = status;
+          mobileTabButtons.forEach(btn => {
+              btn.classList.remove('active-tab', 'text-sky-600', 'border-sky-600', 'text-kanban-todo-text', 'border-kanban-todo-text', 'text-kanban-inprogress-text', 'border-kanban-inprogress-text', 'text-kanban-done-text', 'border-kanban-done-text');
+              btn.classList.add('text-slate-600', 'border-transparent');
+              if (btn.dataset.status === status) {
+                btn.classList.add('active-tab');
+                if (status === 'todo') btn.classList.add('text-kanban-todo-text', 'border-kanban-todo-text');
+                else if (status === 'inprogress') btn.classList.add('text-kanban-inprogress-text', 'border-kanban-inprogress-text');
+                else if (status === 'done') btn.classList.add('text-kanban-done-text', 'border-kanban-done-text');
+                else btn.classList.add('text-sky-600', 'border-sky-600');
+              }
+          });
+          kanbanColumns.forEach(col => {
+              if (col.id === status) { col.classList.add('active-mobile-column'); col.style.display = 'flex'; }
+              else { col.classList.remove('active-mobile-column'); col.style.display = 'none'; }
+          });
+      }
+      mobileTabButtons.forEach(button => {
+          button.addEventListener('click', () => { setActiveMobileColumn(button.dataset.status); });
+      });
+      function handleMobileLayout() {
+          if (window.innerWidth < 768) {
+              kanbanMobileTabs.style.display = 'flex';
+              setActiveMobileColumn(currentActiveMobileColumnId);
+          } else {
+              kanbanMobileTabs.style.display = 'none';
+              kanbanColumns.forEach(col => {
+                  col.style.display = 'flex'; col.classList.remove('active-mobile-column');
+              });
+          }
+      }
+      window.addEventListener('resize', handleMobileLayout);
+
+      // --- Confetti Logic ---
+      const confettiCanvas = document.getElementById('confetti-canvas');
+      const confettiCtx = confettiCanvas.getContext('2d');
+      let confettiAnimationId = null;
+
+      function resizeConfettiCanvas() {
+          confettiCanvas.width = window.innerWidth;
+          confettiCanvas.height = window.innerHeight;
+      }
+
+      function ConfettiParticle(x, y) {
+          this.x = x; this.y = y; this.size = Math.random() * 6 + 4; 
+          this.speedX = Math.random() * 4 - 2; 
+          this.speedY = Math.random() * -10 - 4; 
+          const colors = ['#f43f5e', '#ec4899', '#d946ef', '#a855f7', '#8b5cf6', '#6366f1', '#3b82f6', '#0ea5e9', '#06b6d4', '#14b8a6', '#10b981', '#22c55e', '#84cc16', '#eab308', '#f59e0b', '#f97316']; 
+          this.color = colors[Math.floor(Math.random() * colors.length)];
+          this.opacity = 1; this.angle = Math.random() * Math.PI * 2;
+          this.spin = Math.random() * 0.3 - 0.15; this.gravity = 0.15; 
+          this.drag = 0.985;
+      }
+      ConfettiParticle.prototype.update = function() {
+          this.speedY += this.gravity; this.speedX *= this.drag; this.x += this.speedX; this.y += this.speedY;
+          this.angle += this.spin; this.opacity -= 0.008; 
+      };
+      ConfettiParticle.prototype.draw = function() {
+          confettiCtx.save(); confettiCtx.globalAlpha = this.opacity;
+          confettiCtx.translate(this.x + this.size / 2, this.y + this.size / 2);
+          confettiCtx.rotate(this.angle); confettiCtx.fillStyle = this.color;
+          confettiCtx.fillRect(-this.size /2, -this.size /2, this.size, this.size * 1.5); 
+          confettiCtx.restore();
+      };
+      function animateConfetti() {
+          confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+          let stillAlive = false;
+          for (let i = confettiParticles.length - 1; i >= 0; i--) {
+              const p = confettiParticles[i]; p.update(); p.draw();
+              if (p.opacity > 0 && p.y < confettiCanvas.height + p.size) stillAlive = true; 
+              else confettiParticles.splice(i, 1);
+          }
+          if (stillAlive) confettiAnimationId = requestAnimationFrame(animateConfetti);
+          else {
+              confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+              cancelAnimationFrame(confettiAnimationId); confettiAnimationId = null;
+          }
+      }
+      function triggerConfetti() {
+          if (confettiAnimationId) cancelAnimationFrame(confettiAnimationId); 
+          confettiParticles.length = 0; 
+          const particleCount = 100; 
+          const centerX = confettiCanvas.width / 2;
+          const centerY = confettiCanvas.height / 3; 
+          for (let i = 0; i < particleCount; i++) {
+              confettiParticles.push(new ConfettiParticle(centerX, centerY));
+          }
+          animateConfetti();
+      }
+      window.addEventListener('resize', resizeConfettiCanvas);
+      resizeConfettiCanvas(); 
+
+      // === Initialize Project Specific Kanban ===
+      function initializeKanban() {
+        const params = new URLSearchParams(window.location.search);
+        projectId = params.get('project');
+        const projectDisplayNameElement = document.getElementById('project-display-name');
+
+        if (!projectId) {
+            if(projectDisplayNameElement) projectDisplayNameElement.textContent = "KHÔNG HỢP LỆ";
+            showAlert("Không tìm thấy ID dự án. Vui lòng truy cập từ trang chủ.");
+            // Optionally redirect back to index.html after a delay
+            // setTimeout(() => { window.location.href = './index.html'; }, 3000);
+            return; // Stop further execution if no project ID
+        }
+
+        if(projectDisplayNameElement) projectDisplayNameElement.textContent = projectId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        tasksCollectionPath = `projects/${projectId}/tasks`;
+        console.log("Kanban initialized for project:", projectId, "Tasks path:", tasksCollectionPath);
+
+        // Start Firestore listener for the specific project
+        const q = query(collection(db, tasksCollectionPath));
+        onSnapshot(q, (querySnapshot) => {
+            console.log("Firestore snapshot received for project", projectId, ":", querySnapshot.docs.length, "documents");
+            allTasks = [];
+            querySnapshot.forEach((docSnap) => { allTasks.push({ ...docSnap.data(), id: docSnap.id }); });
+            allTasks.sort((a, b) => {
+                if (a.isPinned && !b.isPinned) return -1; if (!a.isPinned && b.isPinned) return 1;
+                if (a.order != null && b.order != null) return a.order - b.order;
+                if (a.order != null) return -1;
+                if (b.order != null) return 1;
+                if (a.createdAt && b.createdAt) return b.createdAt.toMillis() - a.createdAt.toMillis();
+                else if (a.createdAt) return -1;
+                else if (b.createdAt) return 1;
+                return 0;
+            });
+            populateFilterOptions(); 
+            applyAllFilters(); 
+            updateColumnUI();
+        }, (error) => {
+            console.error("Error fetching tasks for project", projectId, ":", error);
+            showAlert("Lỗi tải danh sách công việc cho dự án: " + error.message);
+        });
+        handleMobileLayout();
+      }
+
+      initializeKanban(); // Call initialization
+
+    </script>
+</body>
+</html>
