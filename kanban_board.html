@@ -2,14 +2,15 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bảng Kanban Task</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Bảng Kanban Task (Mobile Tabs & Swipe)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            overscroll-behavior: none; 
+            overscroll-behavior-y: contain; /* Prevent pull-to-refresh on vertical scroll */
+            overscroll-behavior-x: none; /* Allow horizontal swipe */
         }
         .tasks-container::-webkit-scrollbar, #archived-tasks-list::-webkit-scrollbar, #task-detail-bottom-sheet::-webkit-scrollbar, #bs-change-log-list::-webkit-scrollbar {
             width: 8px;
@@ -19,11 +20,11 @@
             border-radius: 10px;
         }
         .tasks-container::-webkit-scrollbar-thumb, #archived-tasks-list::-webkit-scrollbar-thumb, #task-detail-bottom-sheet::-webkit-scrollbar-thumb, #bs-change-log-list::-webkit-scrollbar-thumb {
-            background: #cbd5e1; /* Tailwind gray-400 */
+            background: #cbd5e1;
             border-radius: 10px;
         }
         .tasks-container::-webkit-scrollbar-thumb:hover, #archived-tasks-list::-webkit-scrollbar-thumb:hover, #task-detail-bottom-sheet::-webkit-scrollbar-thumb:hover, #bs-change-log-list::-webkit-scrollbar-thumb:hover {
-            background: #9ca3af; /* Tailwind gray-500 */
+            background: #9ca3af;
         }
         .line-clamp-1, .line-clamp-2 {
             overflow: hidden;
@@ -39,15 +40,10 @@
         .wip-limit-exceeded .tasks-container { border: 2px dashed #ef4444 !important; background-color: #fee2e2 !important; } 
         
         .column-at-wip-limit > .column-header .task-count-badge::after {
-            content: " (WIP Limit!)";
-            color: #ef4444; 
-            font-weight: 600; 
-            font-size: 0.7rem; 
-            margin-left: 0.25rem;
+            content: " (WIP Limit!)"; color: #ef4444; font-weight: 600; 
+            font-size: 0.7rem; margin-left: 0.25rem;
         }
-        .column-at-wip-limit {
-            border: 2px solid #ef4444 !important; 
-        }
+        .column-at-wip-limit { border: 2px solid #ef4444 !important; }
 
         .filter-bar {
             max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; margin-bottom: 0;
@@ -61,33 +57,18 @@
 
         #task-detail-bottom-sheet-overlay { transition: opacity 0.3s ease-in-out; }
         #task-detail-bottom-sheet { transition: transform 0.3s ease-out; }
+        #confetti-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2000; }
+        #bs-change-log-container { max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.4s ease-out, opacity 0.3s ease-out, margin-top 0.4s ease-out, padding-top 0.4s ease-out; }
+        #bs-change-log-container.visible { max-height: 300px; opacity: 1; margin-top: 0.75rem; padding-top: 0.75rem; }
+        #bs-change-log-list { max-height: 250px; overflow-y: auto; }
 
-        #confetti-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 2000;
+        /* Mobile specific styles for columns when in tab view */
+        @media (max-width: 767px) {
+            .kanban-column.active-mobile-column {
+                height: calc(100vh - 60px - 48px - 20px - 20px); /* VP height - header - tabs - app padding top - app padding bottom */
+                overflow-y: auto;
+            }
         }
-        #bs-change-log-container {
-            max-height: 0;
-            opacity: 0;
-            overflow: hidden;
-            transition: max-height 0.4s ease-out, opacity 0.3s ease-out, margin-top 0.4s ease-out, padding-top 0.4s ease-out;
-        }
-        #bs-change-log-container.visible {
-            max-height: 300px; 
-            opacity: 1;
-            margin-top: 0.75rem; 
-            padding-top: 0.75rem; 
-        }
-        #bs-change-log-list {
-            max-height: 250px; 
-            overflow-y: auto;
-        }
-
     </style>
     <script>
       tailwind.config = {
@@ -113,7 +94,7 @@
     </script>
 </head>
 <body class="bg-slate-100 text-slate-800">
-    <canvas id="confetti-canvas" class="fixed top-0 left-0 w-full h-full pointer-events-none z-[2000]"></canvas> 
+    <canvas id="confetti-canvas"></canvas> 
     <div class="app-container w-full"> 
         <header id="app-main-header" class="text-center mb-6 max-w-screen-xl mx-auto px-4 md:px-6">
             <h1 class="text-3xl font-semibold text-sky-600">
@@ -383,8 +364,8 @@
 
       let draggedTask = null;
       let currentEditingTaskId = null;
-      let projectId = ''; // Will be set from URL
-      let tasksCollectionPath = ''; // Will be set based on projectId
+      let projectId = ''; 
+      let tasksCollectionPath = ''; 
 
       const priorityMap = { high: 'Cao', medium: 'Trung bình', low: 'Thấp' };
       let currentTaskCounts = { todo: 0, inprogress: 0, done: 0 };
@@ -771,6 +752,7 @@
       }
 
       async function addTaskToFirestore(title, description, status, priority, dueDate, assignee, tagsString) {
+        console.log("addTaskToFirestore called with:", {title, description, status, priority, dueDate, assignee, tagsString});
         if (!title.trim()) { showAlert("Tiêu đề không được để trống!"); return; }
         const columnElement = document.getElementById(status);
         if (!columnElement) { showAlert(`Lỗi: Không tìm thấy cột cho trạng thái "${status}".`); return; }
@@ -797,7 +779,7 @@
 
         const tagsArray = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
         try {
-            await addDoc(collection(db, tasksCollectionPath), { // Use dynamic path
+            await addDoc(collection(db, tasksCollectionPath), { 
                 title, description, status, priority, dueDate, assignee,
                 tags: tagsArray, isBlocked: false, blockReason: "", 
                 createdAt: serverTimestamp(), 
@@ -811,7 +793,7 @@
       
       async function archiveTask(taskId, currentStatus) {
           if (!taskId) return;
-          const taskRef = doc(db, tasksCollectionPath, taskId); // Use dynamic path
+          const taskRef = doc(db, tasksCollectionPath, taskId); 
           try {
               await updateDoc(taskRef, {
                   isArchived: true,
@@ -828,7 +810,7 @@
 
       async function unarchiveTask(taskId, originalStatus) {
           if (!taskId) return;
-          const taskRef = doc(db, tasksCollectionPath, taskId); // Use dynamic path
+          const taskRef = doc(db, tasksCollectionPath, taskId); 
           try {
               await updateDoc(taskRef, {
                   isArchived: false,
@@ -995,7 +977,7 @@
         if (!taskData || !taskData.id) return;
         const newPinnedState = !taskData.isPinned;
         try {
-            const taskRef = doc(db, tasksCollectionPath, taskData.id); // Use dynamic path
+            const taskRef = doc(db, tasksCollectionPath, taskData.id); 
             await updateDoc(taskRef, { 
                 isPinned: newPinnedState,
                 updatedAt: serverTimestamp() 
@@ -1038,7 +1020,7 @@
           }
           
           try {
-              const taskRef = doc(db, tasksCollectionPath, taskId); // Use dynamic path
+              const taskRef = doc(db, tasksCollectionPath, taskId); 
               const taskToUpdate = allTasks.find(t => t.id === taskId);
               
               const updatePayload = { 
@@ -1165,7 +1147,7 @@
                   }
 
                   if (draggedTaskData.order !== newOrder) {
-                    await updateDoc(doc(db, tasksCollectionPath, taskId), { // Use dynamic path
+                    await updateDoc(doc(db, tasksCollectionPath, taskId), { 
                         order: newOrder, 
                         updatedAt: serverTimestamp() 
                     });
@@ -1372,25 +1354,23 @@
       window.addEventListener('resize', resizeConfettiCanvas);
       resizeConfettiCanvas(); 
 
+
       // === Initialize Project Specific Kanban ===
       function initializeKanban() {
         const params = new URLSearchParams(window.location.search);
-        projectId = params.get('project');
+        projectId = params.get('project'); // Set global projectId
         const projectDisplayNameElement = document.getElementById('project-display-name');
 
         if (!projectId) {
             if(projectDisplayNameElement) projectDisplayNameElement.textContent = "KHÔNG HỢP LỆ";
             showAlert("Không tìm thấy ID dự án. Vui lòng truy cập từ trang chủ.");
-            // Optionally redirect back to index.html after a delay
-            // setTimeout(() => { window.location.href = './index.html'; }, 3000);
-            return; // Stop further execution if no project ID
+            return; 
         }
 
         if(projectDisplayNameElement) projectDisplayNameElement.textContent = projectId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-        tasksCollectionPath = `projects/${projectId}/tasks`;
+        tasksCollectionPath = `projects/${projectId}/tasks`; // Set global tasksCollectionPath
         console.log("Kanban initialized for project:", projectId, "Tasks path:", tasksCollectionPath);
 
-        // Start Firestore listener for the specific project
         const q = query(collection(db, tasksCollectionPath));
         onSnapshot(q, (querySnapshot) => {
             console.log("Firestore snapshot received for project", projectId, ":", querySnapshot.docs.length, "documents");
@@ -1416,7 +1396,7 @@
         handleMobileLayout();
       }
 
-      initializeKanban(); // Call initialization
+      initializeKanban(); 
 
     </script>
 </body>
