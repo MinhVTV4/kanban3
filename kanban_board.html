@@ -311,7 +311,7 @@
 
       // Các thành phần DOM
       const appContainer = document.querySelector('.app-container');
-      const kanbanBoardElement = document.querySelector('.kanban-board'); // Thêm để gắn sự kiện vuốt
+      const kanbanBoardElement = document.querySelector('.kanban-board'); 
       const kanbanColumns = document.querySelectorAll('.kanban-column');
       const customAlertOverlay = document.getElementById('custom-alert-overlay');
       const customAlertMessage = document.getElementById('custom-alert-message');
@@ -383,8 +383,8 @@
 
       let draggedTask = null;
       let currentEditingTaskId = null;
-      let projectId = ''; // Sẽ được đặt từ URL
-      let tasksCollectionPath = ''; // Sẽ được đặt dựa trên projectId
+      let projectId = ''; 
+      let tasksCollectionPath = ''; 
 
       const priorityMap = { high: 'Cao', medium: 'Trung bình', low: 'Thấp' };
       let currentTaskCounts = { todo: 0, inprogress: 0, done: 0 };
@@ -395,9 +395,9 @@
       let touchstartY = 0;
       let touchendX = 0;
       let touchendY = 0;
-      const swipeThreshold = 75; // Khoảng cách tối thiểu để coi là một cú vuốt (pixel)
-      const swipeAngleThreshold = 30; // Góc tối đa (độ) so với phương ngang để coi là vuốt ngang
-      const tabOrder = ['todo', 'inprogress', 'done']; // Thứ tự các tab
+      const swipeThreshold = 75; 
+      const swipeAngleThreshold = 30; 
+      const tabOrder = ['todo', 'inprogress', 'done']; 
 
 
       // Các biểu tượng SVG
@@ -554,7 +554,7 @@
           if (detailedChangesArray.length > 0) {
               const changeLogEntry = {
                   timestamp: new Date(), 
-                  userId: "System", // Cần thay thế bằng ID người dùng thực tế nếu có xác thực
+                  userId: "System", 
                   changes: detailedChangesArray
               };
               updatePayload.changeLog = arrayUnion(changeLogEntry);
@@ -1280,7 +1280,9 @@
                   container.classList.add('empty', 'border-2', 'border-dashed', 'border-slate-300', 'rounded-md', 'p-4', 'mt-2.5');
               }
           });
-          updateColumnUI(); handleMobileLayout();
+          updateColumnUI(); 
+          // Gọi applyMobileColumnVisibilityAndStyles thay vì handleMobileLayout để tránh gọi lại setActiveMobileColumn không cần thiết
+          applyMobileColumnVisibilityAndStyles();
       }
       applyFiltersBtn.addEventListener('click', applyAllFilters);
       clearFiltersBtn.addEventListener('click', () => {
@@ -1289,39 +1291,75 @@
           applyAllFilters();
       });
 
-      function setActiveMobileColumn(status) {
-          currentActiveMobileColumnId = status;
-          mobileTabButtons.forEach(btn => {
-              btn.classList.remove('active-tab', 'text-sky-600', 'border-sky-600', 'text-kanban-todo-text', 'border-kanban-todo-text', 'text-kanban-inprogress-text', 'border-kanban-inprogress-text', 'text-kanban-done-text', 'border-kanban-done-text');
-              btn.classList.add('text-slate-600', 'border-transparent');
-              if (btn.dataset.status === status) {
+      // Hàm mới để quản lý kiểu và hiển thị của cột/tab trên di động
+      function applyMobileColumnVisibilityAndStyles() {
+        const isMobileView = window.innerWidth < 768;
+
+        // Định kiểu cho các nút tab
+        mobileTabButtons.forEach(btn => {
+            btn.classList.remove(
+                'active-tab',
+                'bg-kanban-todo', 'text-kanban-todo-text', 'border-rose-300',
+                'bg-kanban-inprogress', 'text-kanban-inprogress-text', 'border-amber-300',
+                'bg-kanban-done', 'text-kanban-done-text', 'border-green-300'
+            );
+            // Thêm lại các lớp mặc định cho tab không hoạt động
+            btn.classList.add('text-slate-600', 'border-transparent', 'hover:text-sky-600', 'hover:border-sky-600');
+
+
+            if (isMobileView && btn.dataset.status === currentActiveMobileColumnId) {
                 btn.classList.add('active-tab');
-                if (status === 'todo') btn.classList.add('text-kanban-todo-text', 'border-kanban-todo-text');
-                else if (status === 'inprogress') btn.classList.add('text-kanban-inprogress-text', 'border-kanban-inprogress-text');
-                else if (status === 'done') btn.classList.add('text-kanban-done-text', 'border-kanban-done-text');
-                else btn.classList.add('text-sky-600', 'border-sky-600');
-              }
-          });
-          kanbanColumns.forEach(col => {
-              if (col.id === status) { col.classList.add('active-mobile-column'); col.style.display = 'flex'; }
-              else { col.classList.remove('active-mobile-column'); col.style.display = 'none'; }
-          });
+                // Xóa các lớp mặc định/không hoạt động trước khi thêm lớp hoạt động
+                btn.classList.remove('text-slate-600', 'border-transparent', 'hover:text-sky-600', 'hover:border-sky-600');
+                
+                if (currentActiveMobileColumnId === 'todo') {
+                    btn.classList.add('bg-kanban-todo', 'text-kanban-todo-text', 'border-rose-300');
+                } else if (currentActiveMobileColumnId === 'inprogress') {
+                    btn.classList.add('bg-kanban-inprogress', 'text-kanban-inprogress-text', 'border-amber-300');
+                } else if (currentActiveMobileColumnId === 'done') {
+                    btn.classList.add('bg-kanban-done', 'text-kanban-done-text', 'border-green-300');
+                }
+            }
+        });
+
+        // Thiết lập hiển thị cột và tiêu đề H2
+        kanbanColumns.forEach(col => {
+            const h2 = col.querySelector('.column-header h2');
+            if (!h2) return;
+
+            if (isMobileView) {
+                if (col.id === currentActiveMobileColumnId) {
+                    col.style.display = 'flex';
+                    h2.style.display = 'none'; // Ẩn H2 của cột đang hoạt động trên di động
+                } else {
+                    col.style.display = 'none';
+                    h2.style.display = ''; // Đảm bảo H2 hiển thị nếu cột này không hoạt động (cho lần chuyển đổi sau)
+                }
+            } else { // Chế độ xem máy tính để bàn
+                col.style.display = 'flex';
+                h2.style.display = ''; // Luôn hiển thị H2 trên máy tính để bàn
+            }
+        });
       }
+
+      // Hàm được gọi khi nhấp vào nút tab di động hoặc vuốt
+      function setActiveMobileColumn(newStatus) {
+          currentActiveMobileColumnId = newStatus;
+          applyMobileColumnVisibilityAndStyles();
+      }
+      
       mobileTabButtons.forEach(button => {
           button.addEventListener('click', () => { setActiveMobileColumn(button.dataset.status); });
       });
+
+      // Hàm xử lý thay đổi kích thước cửa sổ và tải ban đầu
       function handleMobileLayout() {
-          if (window.innerWidth < 768) {
-              kanbanMobileTabs.style.display = 'flex';
-              setActiveMobileColumn(currentActiveMobileColumnId);
-          } else {
-              kanbanMobileTabs.style.display = 'none';
-              kanbanColumns.forEach(col => {
-                  col.style.display = 'flex'; col.classList.remove('active-mobile-column');
-              });
-          }
+          const isMobileView = window.innerWidth < 768;
+          kanbanMobileTabs.style.display = isMobileView ? 'flex' : 'none';
+          applyMobileColumnVisibilityAndStyles(); 
       }
       window.addEventListener('resize', handleMobileLayout);
+
 
       // --- Logic Confetti ---
       const confettiCanvas = document.getElementById('confetti-canvas');
@@ -1384,11 +1422,9 @@
 
       // --- Logic Vuốt Tab trên Di động ---
       function handleTouchStart(event) {
-          // Chỉ xử lý khi ở chế độ di động và không có modal nào đang mở
           if (window.innerWidth >= 768 || editTaskModal.classList.contains('flex') || addTaskModal.classList.contains('flex') || archivedTasksModal.classList.contains('flex') || bottomSheet.classList.contains('translate-y-0')) {
               return;
           }
-          // Bỏ qua nếu chạm vào nút hoặc input bên trong task card để tránh xung đột
           const targetElement = event.target;
           if (targetElement.closest('button') || targetElement.closest('input') || targetElement.closest('select') || targetElement.closest('textarea') || targetElement.closest('.task-card-actions') || targetElement.closest('.task-move-actions')) {
             return;
@@ -1402,12 +1438,10 @@
           if (window.innerWidth >= 768 || editTaskModal.classList.contains('flex') || addTaskModal.classList.contains('flex') || archivedTasksModal.classList.contains('flex') || bottomSheet.classList.contains('translate-y-0')) {
               return;
           }
-           // Bỏ qua nếu chạm vào nút hoặc input bên trong task card
           const targetElement = event.target;
           if (targetElement.closest('button') || targetElement.closest('input') || targetElement.closest('select') || targetElement.closest('textarea') || targetElement.closest('.task-card-actions') || targetElement.closest('.task-move-actions')) {
             return;
           }
-
 
           touchendX = event.changedTouches[0].screenX;
           touchendY = event.changedTouches[0].screenY;
@@ -1419,31 +1453,24 @@
           const deltaY = touchendY - touchstartY;
           const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-          // Nếu khoảng cách vuốt quá ngắn, bỏ qua
           if (distance < swipeThreshold) {
-              // console.log("Swipe distance too short.");
               return;
           }
 
-          // Tính góc vuốt
           const angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
           const absAngle = Math.abs(angle);
 
-          // Nếu vuốt chủ yếu theo chiều dọc (để cuộn), bỏ qua
           if (absAngle > swipeAngleThreshold && absAngle < (180 - swipeAngleThreshold)) {
-              // console.log("Swipe is too vertical.", angle);
               return;
           }
 
           const currentIndex = tabOrder.indexOf(currentActiveMobileColumnId);
-          if (currentIndex === -1) return; // Không nên xảy ra
+          if (currentIndex === -1) return; 
 
-          if (deltaX < -swipeThreshold) { // Vuốt sang trái (Tab tiếp theo)
-              // console.log("Swipe Left detected");
+          if (deltaX < -swipeThreshold) { 
               const nextIndex = (currentIndex + 1) % tabOrder.length;
               setActiveMobileColumn(tabOrder[nextIndex]);
-          } else if (deltaX > swipeThreshold) { // Vuốt sang phải (Tab trước đó)
-              // console.log("Swipe Right detected");
+          } else if (deltaX > swipeThreshold) { 
               const prevIndex = (currentIndex - 1 + tabOrder.length) % tabOrder.length;
               setActiveMobileColumn(tabOrder[prevIndex]);
           }
@@ -1466,7 +1493,6 @@
         tasksCollectionPath = `projects/${projectId}/tasks`;
         console.log("Kanban initialized for project:", projectId, "Tasks path:", tasksCollectionPath);
 
-        // Bắt đầu lắng nghe Firestore cho dự án cụ thể
         const q = query(collection(db, tasksCollectionPath));
         onSnapshot(q, (querySnapshot) => {
             console.log("Firestore snapshot received for project", projectId, ":", querySnapshot.docs.length, "documents");
@@ -1484,21 +1510,21 @@
             });
             populateFilterOptions(); 
             applyAllFilters(); 
-            updateColumnUI();
+            // updateColumnUI(); // Sẽ được gọi trong applyAllFilters -> renderFilteredTasks -> applyMobileColumnVisibilityAndStyles
         }, (error) => {
             console.error("Error fetching tasks for project", projectId, ":", error);
             showAlert("Lỗi tải danh sách công việc cho dự án: " + error.message);
         });
-        handleMobileLayout();
+        
+        handleMobileLayout(); // Gọi để thiết lập layout ban đầu
 
-        // Gắn trình lắng nghe sự kiện vuốt vào vùng bảng Kanban
         if (kanbanBoardElement) {
             kanbanBoardElement.addEventListener('touchstart', handleTouchStart, { passive: true });
             kanbanBoardElement.addEventListener('touchend', handleTouchEnd, { passive: true });
         }
       }
 
-      initializeKanban(); // Gọi hàm khởi tạo
+      initializeKanban(); 
 
     </script>
 </body>
