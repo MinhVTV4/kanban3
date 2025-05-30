@@ -140,14 +140,14 @@
             <div class="actions xl:col-span-full 2xl:col-span-6 flex justify-end gap-3 mt-3 sm:mt-0 sm:self-end"> <button id="apply-filters-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-medium py-2 px-4 rounded-md text-sm">Áp dụng lọc</button> <button id="clear-filters-btn" class="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-md text-sm">Xóa bộ lọc</button> </div>
         </div>
 
-        <div id="kanban-mobile-tabs" class="md:hidden flex bg-white border-b border-slate-200 mb-4 shadow-sm max-w-screen-xl mx-auto">
-            <button class="mobile-tab-button flex-1 text-center py-3 px-2 text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-sky-600 hover:border-sky-600 transition-colors flex items-center justify-center gap-1.5" id="tab-todo" data-status="todo">
+        <div id="kanban-mobile-tabs" class="md:hidden flex bg-slate-100 pt-2 px-2 max-w-screen-xl mx-auto">
+            <button class="mobile-tab-button flex-1 text-center text-sm font-medium transition-colors flex items-center justify-center gap-1.5" id="tab-todo" data-status="todo">
                 <span class="icon">📝</span>Cần làm
             </button>
-            <button class="mobile-tab-button flex-1 text-center py-3 px-2 text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-sky-600 hover:border-sky-600 transition-colors flex items-center justify-center gap-1.5" id="tab-inprogress" data-status="inprogress">
+            <button class="mobile-tab-button flex-1 text-center text-sm font-medium transition-colors flex items-center justify-center gap-1.5" id="tab-inprogress" data-status="inprogress">
                 <span class="icon">⚙️</span>Đang làm
             </button>
-            <button class="mobile-tab-button flex-1 text-center py-3 px-2 text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-sky-600 hover:border-sky-600 transition-colors flex items-center justify-center gap-1.5" id="tab-done" data-status="done">
+            <button class="mobile-tab-button flex-1 text-center text-sm font-medium transition-colors flex items-center justify-center gap-1.5" id="tab-done" data-status="done">
                 <span class="icon">✔️</span>Hoàn thành
             </button>
         </div>
@@ -1281,7 +1281,6 @@
               }
           });
           updateColumnUI(); 
-          // Gọi applyMobileColumnVisibilityAndStyles thay vì handleMobileLayout để tránh gọi lại setActiveMobileColumn không cần thiết
           applyMobileColumnVisibilityAndStyles();
       }
       applyFiltersBtn.addEventListener('click', applyAllFilters);
@@ -1291,58 +1290,65 @@
           applyAllFilters();
       });
 
-      // Hàm mới để quản lý kiểu và hiển thị của cột/tab trên di động
+      // Hàm quản lý kiểu và hiển thị của cột/tab trên di động
       function applyMobileColumnVisibilityAndStyles() {
         const isMobileView = window.innerWidth < 768;
 
-        // Định kiểu cho các nút tab
         mobileTabButtons.forEach(btn => {
+            // Xóa tất cả các lớp liên quan đến trạng thái active/inactive và màu sắc cột cụ thể
             btn.classList.remove(
-                'active-tab',
-                'bg-kanban-todo', 'text-kanban-todo-text', 'border-rose-300',
-                'bg-kanban-inprogress', 'text-kanban-inprogress-text', 'border-amber-300',
-                'bg-kanban-done', 'text-kanban-done-text', 'border-green-300'
+                'active-tab', 'font-semibold',
+                'bg-kanban-todo', 'text-kanban-todo-text', 'border-b-0',
+                'bg-kanban-inprogress', 'text-kanban-inprogress-text',
+                'bg-kanban-done', 'text-kanban-done-text',
+                'bg-slate-200', 'hover:bg-slate-300', 'text-slate-700', 'border-transparent'
             );
-            // Thêm lại các lớp mặc định cho tab không hoạt động
-            btn.classList.add('text-slate-600', 'border-transparent', 'hover:text-sky-600', 'hover:border-sky-600');
-
+            // Thêm các lớp cơ bản cho tab (bo tròn trên, padding, margin)
+            btn.classList.add('rounded-t-lg', 'px-3', 'py-2.5', 'mr-1', 'last:mr-0');
 
             if (isMobileView && btn.dataset.status === currentActiveMobileColumnId) {
-                btn.classList.add('active-tab');
-                // Xóa các lớp mặc định/không hoạt động trước khi thêm lớp hoạt động
-                btn.classList.remove('text-slate-600', 'border-transparent', 'hover:text-sky-600', 'hover:border-sky-600');
-                
+                // Tab đang hoạt động
+                btn.classList.add('active-tab', 'font-semibold', 'border-b-0'); // Không có border dưới
                 if (currentActiveMobileColumnId === 'todo') {
-                    btn.classList.add('bg-kanban-todo', 'text-kanban-todo-text', 'border-rose-300');
+                    btn.classList.add('bg-kanban-todo', 'text-kanban-todo-text');
                 } else if (currentActiveMobileColumnId === 'inprogress') {
-                    btn.classList.add('bg-kanban-inprogress', 'text-kanban-inprogress-text', 'border-amber-300');
+                    btn.classList.add('bg-kanban-inprogress', 'text-kanban-inprogress-text');
                 } else if (currentActiveMobileColumnId === 'done') {
-                    btn.classList.add('bg-kanban-done', 'text-kanban-done-text', 'border-green-300');
+                    btn.classList.add('bg-kanban-done', 'text-kanban-done-text');
                 }
+            } else {
+                // Tab không hoạt động (hoặc không phải mobile view)
+                btn.classList.add('bg-slate-200', 'hover:bg-slate-300', 'text-slate-700', 'border-b-2', 'border-transparent');
             }
         });
 
-        // Thiết lập hiển thị cột và tiêu đề H2
         kanbanColumns.forEach(col => {
             const h2 = col.querySelector('.column-header h2');
-            if (!h2) return;
+            col.classList.remove('rounded-t-none', 'md:rounded-lg'); // Xóa các lớp bo tròn có thể có
+            col.classList.add('rounded-lg'); // Thêm lại bo tròn mặc định cho tất cả các góc
 
             if (isMobileView) {
+                col.style.marginTop = '0'; // Đặt sát tab
                 if (col.id === currentActiveMobileColumnId) {
                     col.style.display = 'flex';
-                    h2.style.display = 'none'; // Ẩn H2 của cột đang hoạt động trên di động
+                    col.classList.remove('rounded-lg'); // Xóa bo tròn mặc định
+                    col.classList.add('rounded-b-lg'); // Chỉ bo tròn góc dưới
+                    if (h2) h2.style.display = 'none';
                 } else {
                     col.style.display = 'none';
-                    h2.style.display = ''; // Đảm bảo H2 hiển thị nếu cột này không hoạt động (cho lần chuyển đổi sau)
+                    if (h2) h2.style.display = ''; 
                 }
             } else { // Chế độ xem máy tính để bàn
                 col.style.display = 'flex';
-                h2.style.display = ''; // Luôn hiển thị H2 trên máy tính để bàn
+                col.style.marginTop = ''; 
+                if (h2) h2.style.display = '';
+                // Đảm bảo cột có bo tròn đầy đủ trên desktop
+                col.classList.add('rounded-lg'); 
+                col.classList.remove('rounded-b-lg', 'rounded-t-none');
             }
         });
       }
 
-      // Hàm được gọi khi nhấp vào nút tab di động hoặc vuốt
       function setActiveMobileColumn(newStatus) {
           currentActiveMobileColumnId = newStatus;
           applyMobileColumnVisibilityAndStyles();
@@ -1352,7 +1358,6 @@
           button.addEventListener('click', () => { setActiveMobileColumn(button.dataset.status); });
       });
 
-      // Hàm xử lý thay đổi kích thước cửa sổ và tải ban đầu
       function handleMobileLayout() {
           const isMobileView = window.innerWidth < 768;
           kanbanMobileTabs.style.display = isMobileView ? 'flex' : 'none';
@@ -1510,13 +1515,12 @@
             });
             populateFilterOptions(); 
             applyAllFilters(); 
-            // updateColumnUI(); // Sẽ được gọi trong applyAllFilters -> renderFilteredTasks -> applyMobileColumnVisibilityAndStyles
         }, (error) => {
             console.error("Error fetching tasks for project", projectId, ":", error);
             showAlert("Lỗi tải danh sách công việc cho dự án: " + error.message);
         });
         
-        handleMobileLayout(); // Gọi để thiết lập layout ban đầu
+        handleMobileLayout(); 
 
         if (kanbanBoardElement) {
             kanbanBoardElement.addEventListener('touchstart', handleTouchStart, { passive: true });
