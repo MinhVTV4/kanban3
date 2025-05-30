@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trang Chủ - Kanban Theo Dự Án</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-slate-100 flex items-center justify-center min-h-screen">
+    <div class="bg-white p-8 md:p-12 rounded-xl shadow-2xl w-full max-w-md">
+        <h1 class="text-3xl font-bold text-sky-600 text-center mb-8">Quản Lý Công Việc Kanban</h1>
+        <div class="mb-6">
+            <label for="project-name-input" class="block text-sm font-medium text-slate-700 mb-1">
+                Nhập Tên Dự Án hoặc ID Dự Án:
+            </label>
+            <input type="text" id="project-name-input" 
+                   class="w-full p-3 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 placeholder-slate-400" 
+                   placeholder="Ví dụ: dự án alpha, team-marketing...">
+        </div>
+        <button id="go-to-kanban-btn" 
+                class="w-full bg-sky-500 hover:bg-sky-600 text-white font-semibold py-3 px-4 rounded-md transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500">
+            Truy cập Bảng Kanban
+        </button>
+        <p class="text-xs text-slate-500 mt-4 text-center">
+            Nếu dự án chưa tồn tại, một bảng Kanban mới sẽ được tạo cho dự án này.
+        </p>
+    </div>
+
+    <script>
+        const projectNameInput = document.getElementById('project-name-input');
+        const goToKanbanBtn = document.getElementById('go-to-kanban-btn');
+
+        function normalizeProjectName(name) {
+            if (!name) return '';
+            // Convert to lowercase, replace spaces with hyphens
+            let projectId = name.trim().toLowerCase().replace(/\s+/g, '-');
+            // Remove Vietnamese diacritics
+            projectId = projectId.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            // Remove special characters except hyphens and alphanumeric
+            projectId = projectId.replace(/[^a-z0-9-]/g, '');
+            // Ensure it doesn't start or end with a hyphen, or have multiple hyphens
+            projectId = projectId.replace(/^-+|-+$/g, '').replace(/-+/g, '-');
+            return projectId;
+        }
+
+        function goToKanban() {
+            const projectName = projectNameInput.value;
+            if (!projectName.trim()) {
+                alert("Vui lòng nhập tên dự án.");
+                projectNameInput.focus();
+                return;
+            }
+            const projectId = normalizeProjectName(projectName);
+            if (!projectId) {
+                alert("Tên dự án không hợp lệ sau khi chuẩn hóa. Vui lòng thử tên khác (chỉ chữ, số, dấu gạch ngang).");
+                projectNameInput.focus();
+                return;
+            }
+            
+            try {
+                const currentOrigin = window.location.origin; // e.g., "https://yourdomain.com" or "blob:https://..."
+                const currentPathname = window.location.pathname; // e.g., "/path/to/index.html" or "/some-guid/index.html"
+                
+                // Get the directory path by removing the current file name
+                const directoryPath = currentPathname.substring(0, currentPathname.lastIndexOf('/') + 1);
+                
+                const targetFile = 'kanban_board.html';
+                const queryParams = '?project=' + encodeURIComponent(projectId);
+                
+                // Construct the full URL
+                // This assumes kanban_board.html is in the same directory as index.html
+                const targetUrl = currentOrigin + directoryPath + targetFile + queryParams;
+                
+                console.log("Navigating to:", targetUrl);
+                window.location.href = targetUrl;
+
+            } catch (e) {
+                console.error("Error constructing or navigating to URL:", e);
+                // Fallback to simpler relative navigation if URL construction fails (though less reliable)
+                try {
+                    const fallbackTarget = './kanban_board.html?project=' + encodeURIComponent(projectId);
+                    console.warn("Falling back to relative navigation:", fallbackTarget);
+                    window.location.href = fallbackTarget;
+                } catch (fallbackError) {
+                    console.error("Fallback navigation also failed:", fallbackError);
+                    alert("Đã xảy ra lỗi khi cố gắng điều hướng: " + fallbackError.message);
+                }
+            }
+        }
+
+        goToKanbanBtn.addEventListener('click', goToKanban);
+        projectNameInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); 
+                goToKanban();
+            }
+        });
+    </script>
+</body>
+</html>
