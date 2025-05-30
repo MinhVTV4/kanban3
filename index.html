@@ -14,6 +14,10 @@
             transform: translateY(-2px);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* shadow-lg */
         }
+        .action-button svg {
+            width: 1rem; /* text-sm */
+            height: 1rem;
+        }
     </style>
     <script>
       tailwind.config = {
@@ -65,9 +69,38 @@
         </div>
     </div>
 
+    <div id="edit-project-modal" class="modal hidden fixed inset-0 bg-slate-900/70 items-center justify-center z-50 p-4">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-lg">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-200">
+                <h3 class="text-xl font-semibold text-sky-600">Chỉnh Sửa Dự Án</h3>
+                <button id="close-edit-project-modal-btn" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+            </div>
+            <input type="hidden" id="editing-project-id">
+            <div class="mb-4">
+                <label for="edit-project-name-input" class="block text-sm font-medium text-slate-700 mb-1">Tên Dự Án Mới:</label>
+                <input type="text" id="edit-project-name-input" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm">
+            </div>
+            <div class="mb-4">
+                <label for="edit-project-note-input" class="block text-sm font-medium text-slate-700 mb-1">Ghi Chú Mới:</label>
+                <textarea id="edit-project-note-input" class="w-full p-2.5 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm min-h-[80px]"></textarea>
+            </div>
+            <div class="modal-buttons flex justify-end gap-3 mt-5">
+                <button type="button" id="cancel-edit-project-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2 px-4 rounded-md text-sm">Hủy</button>
+                <button type="button" id="save-project-changes-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-medium py-2 px-4 rounded-md text-sm">Lưu Thay Đổi</button>
+            </div>
+        </div>
+    </div>
+     <div id="custom-alert-overlay" class="hidden fixed inset-0 bg-slate-900/70 items-center justify-center z-[1060] p-4">
+        <div id="custom-alert-box" class="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm text-center">
+            <p id="custom-alert-message" class="text-slate-700 mb-4"></p>
+            <button id="custom-alert-ok-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-medium py-2 px-5 rounded-md text-sm">OK</button>
+        </div>
+    </div>
+
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
-        import { getFirestore, collection, query, onSnapshot, doc, getDoc, setDoc, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js"; // Import setDoc
+        import { getFirestore, collection, query, onSnapshot, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCWfij5n2cTb1jGkUreaLtwi7IENVxssbc",
@@ -87,6 +120,31 @@
         const goToKanbanBtn = document.getElementById('go-to-kanban-btn');
         const projectsListContainer = document.getElementById('projects-list-container');
         const loadingProjectsMsg = document.getElementById('loading-projects-msg');
+
+        // Edit Project Modal Elements
+        const editProjectModal = document.getElementById('edit-project-modal');
+        const closeEditProjectModalBtn = document.getElementById('close-edit-project-modal-btn');
+        const cancelEditProjectBtn = document.getElementById('cancel-edit-project-btn');
+        const saveProjectChangesBtn = document.getElementById('save-project-changes-btn');
+        const editingProjectIdInput = document.getElementById('editing-project-id');
+        const editProjectNameInput = document.getElementById('edit-project-name-input');
+        const editProjectNoteInput = document.getElementById('edit-project-note-input');
+        
+        // Custom Alert Elements
+        const customAlertOverlay = document.getElementById('custom-alert-overlay');
+        const customAlertMessage = document.getElementById('custom-alert-message');
+        const customAlertOkBtn = document.getElementById('custom-alert-ok-btn');
+
+        function showAlert(message) { 
+            customAlertMessage.textContent = message; 
+            customAlertOverlay.classList.remove('hidden'); 
+            customAlertOverlay.classList.add('flex');
+        }
+        customAlertOkBtn.addEventListener('click', () => { 
+            customAlertOverlay.classList.add('hidden');
+            customAlertOverlay.classList.remove('flex');
+        });
+
 
         function normalizeProjectName(name) {
             if (!name) return '';
@@ -119,28 +177,61 @@
                 const project = docSnap.data();
                 const projectId = docSnap.id; 
 
-                const projectItem = document.createElement('a');
-                projectItem.href = `./kanban_board.html?project=${encodeURIComponent(projectId)}`;
-                projectItem.className = 'project-list-item block bg-slate-50 hover:bg-sky-50 p-4 rounded-lg shadow border border-slate-200 transition-all duration-200 ease-in-out';
+                const projectItemContainer = document.createElement('div');
+                projectItemContainer.className = 'project-list-item bg-slate-50 hover:bg-sky-50 p-4 rounded-lg shadow border border-slate-200 transition-all duration-200 ease-in-out flex justify-between items-start';
+
+                const projectLink = document.createElement('a');
+                projectLink.href = `./kanban_board.html?project=${encodeURIComponent(projectId)}`;
+                projectLink.target = "_blank"; // Open in new tab
+                projectLink.className = 'flex-grow';
                 
                 const nameEl = document.createElement('h3');
                 nameEl.className = 'text-lg font-semibold text-sky-700 mb-1';
                 nameEl.textContent = project.name || projectId; 
-                projectItem.appendChild(nameEl);
+                projectLink.appendChild(nameEl);
 
                 if (project.note) {
                     const noteEl = document.createElement('p');
                     noteEl.className = 'text-sm text-slate-600 mb-1 line-clamp-2';
                     noteEl.textContent = project.note;
-                    projectItem.appendChild(noteEl);
+                    projectLink.appendChild(noteEl);
                 }
                 
                 const dateEl = document.createElement('p');
                 dateEl.className = 'text-xs text-slate-400';
                 dateEl.textContent = `Tạo lúc: ${formatDate(project.createdAt)}`;
-                projectItem.appendChild(dateEl);
+                projectLink.appendChild(dateEl);
                 
-                projectsListContainer.appendChild(projectItem);
+                projectItemContainer.appendChild(projectLink);
+
+                // Action Buttons
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'flex gap-2 ml-4 flex-shrink-0';
+
+                const editBtn = document.createElement('button');
+                editBtn.className = 'action-button p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-100 rounded-md transition-colors';
+                editBtn.title = "Sửa dự án";
+                editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>`;
+                editBtn.onclick = (e) => { 
+                    e.preventDefault(); // Prevent link navigation
+                    e.stopPropagation();
+                    openEditProjectModal(projectId, project.name, project.note);
+                };
+                actionsDiv.appendChild(editBtn);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'action-button p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-100 rounded-md transition-colors';
+                deleteBtn.title = "Xóa dự án";
+                deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.56 0c.342.052.682.107 1.022.166m0 0L9.26 9m0 0l-.346 9m3.478-9.595c-.342-.052-.682-.107-1.022-.166m0 0c-.342.052-.682-.107-1.022-.166m6.638 0c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.56 0c.342.052.682.107 1.022.166m-1.022-.165L9.26 9" /></svg>`;
+                deleteBtn.onclick = (e) => {
+                    e.preventDefault(); // Prevent link navigation
+                    e.stopPropagation();
+                    deleteProject(projectId, project.name);
+                };
+                actionsDiv.appendChild(deleteBtn);
+                
+                projectItemContainer.appendChild(actionsDiv);
+                projectsListContainer.appendChild(projectItemContainer);
             });
         }
 
@@ -166,28 +257,26 @@
             const projectNote = projectNoteInput.value.trim();
 
             if (!projectName.trim()) {
-                alert("Vui lòng nhập tên dự án.");
+                showAlert("Vui lòng nhập tên dự án.");
                 projectNameInput.focus();
                 return;
             }
             const projectId = normalizeProjectName(projectName);
             if (!projectId) {
-                alert("Tên dự án không hợp lệ sau khi chuẩn hóa. Vui lòng thử tên khác (chỉ chữ, số, dấu gạch ngang).");
+                showAlert("Tên dự án không hợp lệ sau khi chuẩn hóa. Vui lòng thử tên khác (chỉ chữ, số, dấu gạch ngang).");
                 projectNameInput.focus();
                 return;
             }
 
             try {
-                const projectDocRef = doc(db, PROJECTS_METADATA_COLLECTION, projectId); // Use projectId as document ID
+                const projectDocRef = doc(db, PROJECTS_METADATA_COLLECTION, projectId);
                 const projectDocSnap = await getDoc(projectDocRef);
 
                 if (!projectDocSnap.exists()) {
-                    // Project doesn't exist, create it using setDoc with the projectId as the document ID
                     await setDoc(projectDocRef, { 
-                        name: projectName.trim(), // Store original user-input name
+                        name: projectName.trim(),
                         note: projectNote || "",
                         createdAt: serverTimestamp()
-                        // No need to store 'id: projectId' inside the document if the doc ID is already projectId
                     });
                     console.log(`Project metadata created for ${projectId}`);
                 } else {
@@ -201,13 +290,71 @@
                 const queryParams = '?project=' + encodeURIComponent(projectId);
                 const targetUrl = currentOrigin + directoryPath + targetFile + queryParams;
                 
-                window.location.href = targetUrl;
+                window.open(targetUrl, '_blank'); // Open in new tab
 
             } catch (e) {
                 console.error("Error accessing/creating project or navigating:", e);
-                alert("Đã xảy ra lỗi: " + e.message);
+                showAlert("Đã xảy ra lỗi: " + e.message);
             }
         }
+
+        function openEditProjectModal(id, name, note) {
+            editingProjectIdInput.value = id;
+            editProjectNameInput.value = name || '';
+            editProjectNoteInput.value = note || '';
+            editProjectModal.classList.remove('hidden');
+            editProjectModal.classList.add('flex');
+        }
+
+        function closeEditProjectModal() {
+            editProjectModal.classList.add('hidden');
+            editProjectModal.classList.remove('flex');
+        }
+        closeEditProjectModalBtn.addEventListener('click', closeEditProjectModal);
+        cancelEditProjectBtn.addEventListener('click', closeEditProjectModal);
+
+        saveProjectChangesBtn.addEventListener('click', async () => {
+            const projectId = editingProjectIdInput.value;
+            const newName = editProjectNameInput.value.trim();
+            const newNote = editProjectNoteInput.value.trim();
+
+            if (!newName) {
+                showAlert("Tên dự án không được để trống.");
+                return;
+            }
+            if (!projectId) {
+                 showAlert("Lỗi: Không tìm thấy ID dự án để cập nhật.");
+                return;
+            }
+
+            try {
+                const projectDocRef = doc(db, PROJECTS_METADATA_COLLECTION, projectId);
+                await updateDoc(projectDocRef, {
+                    name: newName,
+                    note: newNote,
+                    updatedAt: serverTimestamp() // Optional: track updates
+                });
+                showAlert("Cập nhật dự án thành công!");
+                closeEditProjectModal();
+            } catch (error) {
+                console.error("Error updating project:", error);
+                showAlert("Lỗi cập nhật dự án: " + error.message);
+            }
+        });
+
+        async function deleteProject(projectId, projectName) {
+            if (confirm(`Bạn có chắc chắn muốn xóa dự án "${projectName || projectId}" không? Các công việc liên quan sẽ KHÔNG bị xóa nhưng có thể không truy cập được nữa.`)) {
+                try {
+                    await deleteDoc(doc(db, PROJECTS_METADATA_COLLECTION, projectId));
+                    showAlert("Đã xóa dự án.");
+                    // The onSnapshot listener will automatically update the list.
+                } catch (error) {
+                    console.error("Error deleting project:", error);
+                    showAlert("Lỗi xóa dự án: " + error.message);
+                }
+            }
+        }
+
 
         goToKanbanBtn.addEventListener('click', goToKanban);
         projectNameInput.addEventListener('keypress', function(event) {
@@ -222,6 +369,15 @@
                 goToKanban();
             }
         });
+         window.onclick = function(event) {
+            if (event.target == editProjectModal) {
+                closeEditProjectModal();
+            }
+            if (event.target == customAlertOverlay) {
+                 customAlertOverlay.classList.add('hidden');
+                 customAlertOverlay.classList.remove('flex');
+            }
+        };
 
         loadAndDisplayProjects();
     </script>
