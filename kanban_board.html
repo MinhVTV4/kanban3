@@ -55,8 +55,8 @@
             transition: max-height 0.4s ease-out, opacity 0.3s ease-out, padding-top 0.4s ease-out, padding-bottom 0.4s ease-out, margin-bottom 0.4s ease-out;
         }
         .filter-bar.filter-bar-visible {
-            max-height: 1000px; opacity: 1; padding-top: 1.25rem; 
-            padding-bottom: 1.25rem; margin-bottom: 1.5rem; 
+            max-height: 1000px; opacity: 1; padding-top: 1rem; /* Reduced padding */
+            padding-bottom: 1rem; margin-bottom: 1rem; /* Reduced margin */
         }
 
         #task-detail-bottom-sheet-overlay { transition: opacity 0.3s ease-in-out; }
@@ -115,22 +115,27 @@
 <body class="bg-slate-100 text-slate-800">
     <canvas id="confetti-canvas" class="fixed top-0 left-0 w-full h-full pointer-events-none z-[2000]"></canvas> 
     <div class="app-container w-full"> 
-        <header id="app-main-header" class="text-center mb-6 max-w-screen-xl mx-auto px-4 md:px-6">
-            <h1 class="text-3xl font-semibold text-sky-600">
-                Bảng Ghi Chú Dự Án: <span id="project-display-name" class="text-purple-600">Đang tải...</span>
-            </h1>
+        <header id="app-main-header" class="bg-white shadow-sm sticky top-0 z-[100] px-4 py-3">
+            <div class="max-w-screen-xl mx-auto flex items-center justify-between">
+                <h1 class="text-lg md:text-xl font-semibold text-purple-600 line-clamp-1 flex-grow md:flex-grow-0 md:text-center md:absolute md:left-1/2 md:-translate-x-1/2" id="project-display-name">
+                    Đang tải...
+                </h1>
+                <div class="flex items-center gap-2 md:gap-3 ml-auto">
+                    <button id="view-archived-btn" class="p-2 rounded-md text-slate-600 hover:bg-slate-200 transition-colors" title="Xem công việc đã lưu trữ">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 md:w-6 md:h-6">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M12 15V7.5M3 7.5h18" />
+                        </svg>
+                    </button>
+                    <button id="toggle-filter-bar-btn" class="p-2 rounded-md text-slate-600 hover:bg-slate-200 transition-colors" title="Hiện/Ẩn bộ lọc">
+                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 md:w-6 md:h-6">
+                           <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.375a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                         </svg>
+                         <span id="toggle-filter-text" class="sr-only">Hiện Bộ Lọc</span> </button>
+                </div>
+            </div>
         </header>
 
-        <div class="actions-bar-container bg-white p-3 md:p-4 rounded-lg shadow mb-6 flex justify-end items-center gap-3 max-w-screen-xl mx-auto px-4 md:px-6"> 
-            <button id="view-archived-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-md flex items-center text-sm">
-                <span class="icon mr-2">🗄️</span> Xem Lưu Trữ
-            </button>
-            <button id="toggle-filter-bar-btn" class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-md flex items-center text-sm">
-                <span class="icon mr-2">☰</span> <span id="toggle-filter-text">Hiện Bộ Lọc</span>
-            </button>
-        </div>
-
-        <div class="filter-bar bg-white rounded-lg shadow grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4 items-end max-w-screen-xl mx-auto px-4 md:px-6" id="filter-bar"> 
+        <div class="filter-bar bg-white rounded-lg shadow-md grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4 items-end max-w-screen-xl mx-auto px-4 md:px-6" id="filter-bar"> 
             <div class="form-group"> <label for="search-term-input" class="block text-sm font-medium text-slate-700 mb-1">Tìm theo tiêu đề:</label> <input type="text" id="search-term-input" placeholder="Nhập từ khóa..." class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm"> </div>
             <div class="form-group"> <label for="filter-priority" class="block text-sm font-medium text-slate-700 mb-1">Lọc theo ưu tiên:</label> <select id="filter-priority" class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm"> <option value="">Tất cả ưu tiên</option> <option value="high">Cao</option> <option value="medium">Trung bình</option> <option value="low">Thấp</option> </select> </div>
             <div class="form-group"> <label for="filter-assignee" class="block text-sm font-medium text-slate-700 mb-1">Lọc theo người thực hiện:</label> <select id="filter-assignee" class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm"> <option value="">Tất cả người thực hiện</option> </select> </div>
@@ -154,7 +159,7 @@
 
         <button id="fab-add-task" class="fixed bottom-8 right-8 w-14 h-14 bg-sky-500 hover:bg-sky-600 text-white rounded-full text-3xl flex items-center justify-center shadow-lg z-50" title="Thêm công việc mới">+</button>
 
-        <div class="kanban-board grid grid-cols-1 md:grid-cols-3 gap-4 px-1 sm:px-2"> 
+        <div class="kanban-board grid grid-cols-1 md:grid-cols-3 gap-4 px-1 sm:px-2 pt-2 md:pt-4"> 
             <div class="kanban-column bg-kanban-todo rounded-lg p-4 shadow-md flex flex-col" id="todo" data-status="todo" data-wip-limit="-1">
                 <div class="column-header flex items-center justify-between mb-4 pb-3 border-b border-rose-300">
                     <span class="title-group flex items-center text-lg font-semibold text-kanban-todo-text">
@@ -316,9 +321,12 @@
       const customAlertOverlay = document.getElementById('custom-alert-overlay');
       const customAlertMessage = document.getElementById('custom-alert-message');
       const customAlertOkBtn = document.getElementById('custom-alert-ok-btn');
-      const toggleFilterBarBtn = document.getElementById('toggle-filter-bar-btn');
-      const toggleFilterText = document.getElementById('toggle-filter-text');
-      const viewArchivedBtn = document.getElementById('view-archived-btn');
+      
+      // Các nút header mới (trỏ tới các button icon)
+      const viewArchivedBtn = document.getElementById('view-archived-btn'); // ID này giờ là của button icon
+      const toggleFilterBarBtn = document.getElementById('toggle-filter-bar-btn'); // ID này giờ là của button icon
+      const toggleFilterText = document.getElementById('toggle-filter-text'); // sr-only span
+
       const filterBar = document.getElementById('filter-bar');
       const searchTermInput = document.getElementById('search-term-input');
       const filterPrioritySelect = document.getElementById('filter-priority');
@@ -400,15 +408,7 @@
       const tabOrder = ['todo', 'inprogress', 'done']; 
 
 
-      // Các biểu tượng SVG
-      const iconPinOutline = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 3.75V16.5L12 14.25L7.5 16.5V3.75m9 0H7.5A2.25 2.25 0 005.25 6v10.5A2.25 2.25 0 007.5 18.75h9A2.25 2.25 0 0018.75 16.5V6A2.25 2.25 0 0016.5 3.75z" /></svg>`;
-      const iconPinSolid = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M6.32 2.577a49.255 49.255 0 0111.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 01-1.085.67L12 18.089l-7.165 3.583A.75.75 0 013.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93z" clip-rule="evenodd" /></svg>`;
-      const iconEditPencil = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>`;
-      const iconArchiveBoxArrowDown = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M12 18.75v-7.5m0 0L9.75 13.5M12 11.25l2.25 2.25" /></svg>`;
-      const iconUnarchive = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 inline mr-1"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>`;
-      const iconArrowLeft = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>`;
-      const iconArrowRight = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>`;
-      const iconCheck = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>`;
+      // Các biểu tượng SVG (đã được nhúng trực tiếp vào HTML)
       const confettiParticles = [];
 
 
@@ -607,7 +607,7 @@
 
                   const unarchiveBtn = document.createElement('button');
                   unarchiveBtn.className = 'bg-green-500 hover:bg-green-600 text-white text-xs font-medium py-1 px-2.5 rounded flex items-center';
-                  unarchiveBtn.innerHTML = iconUnarchive + 'Khôi phục';
+                  unarchiveBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 inline mr-1"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>` + 'Khôi phục';
                   unarchiveBtn.title = "Khôi phục công việc";
                   unarchiveBtn.onclick = () => unarchiveTask(task.id, task.originalStatus || 'todo');
                   actionsDiv.appendChild(unarchiveBtn);
@@ -619,8 +619,10 @@
           openModal(archivedTasksModal);
       }
       function closeArchivedTasksModal() { closeModal(archivedTasksModal); }
-      viewArchivedBtn.addEventListener('click', openArchivedTasksModal);
-      closeArchivedModalBtn.addEventListener('click', closeArchivedTasksModal);
+      // Gắn sự kiện cho nút icon mới
+      if (viewArchivedBtn) viewArchivedBtn.addEventListener('click', openArchivedTasksModal);
+      if (closeArchivedModalBtn) closeArchivedModalBtn.addEventListener('click', closeArchivedTasksModal);
+
 
       function openBottomSheet(taskData) {
         console.log("Opening bottom sheet for task:", taskData);
@@ -883,14 +885,14 @@
           
           const pinButton = document.createElement('button');
           pinButton.className = `pin-btn p-1 rounded hover:bg-slate-200 ${taskData.isPinned ? 'text-amber-500' : 'text-slate-400'}`;
-          pinButton.innerHTML = taskData.isPinned ? iconPinSolid : iconPinOutline;
+          pinButton.innerHTML = taskData.isPinned ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M6.32 2.577a49.255 49.255 0 0111.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 01-1.085.67L12 18.089l-7.165 3.583A.75.75 0 013.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93z" clip-rule="evenodd" /></svg>` : `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 3.75V16.5L12 14.25L7.5 16.5V3.75m9 0H7.5A2.25 2.25 0 005.25 6v10.5A2.25 2.25 0 007.5 18.75h9A2.25 2.25 0 0018.75 16.5V6A2.25 2.25 0 0016.5 3.75z" /></svg>`;
           pinButton.title = taskData.isPinned ? "Bỏ ghim" : "Ghim";
           pinButton.onclick = (e) => { e.stopPropagation(); togglePinTask(taskData); };
           cardActions.appendChild(pinButton);
 
           const editButton = document.createElement('button'); 
           editButton.className = 'p-1 rounded text-slate-400 hover:bg-slate-200 hover:text-slate-600';
-          editButton.innerHTML = iconEditPencil; 
+          editButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>`; 
           editButton.title = "Sửa công việc";
           editButton.onclick = (e) => { e.stopPropagation(); openEditModal(taskData); }; 
           cardActions.appendChild(editButton);
@@ -898,7 +900,7 @@
           if (taskData.status === 'done' && !taskData.isArchived) { 
               const archiveButton = document.createElement('button');
               archiveButton.className = 'p-1 rounded text-slate-400 hover:bg-slate-200 hover:text-purple-600';
-              archiveButton.innerHTML = iconArchiveBoxArrowDown;
+              archiveButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M12 18.75v-7.5m0 0L9.75 13.5M12 11.25l2.25 2.25" /></svg>`;
               archiveButton.title = "Lưu trữ công việc";
               archiveButton.onclick = (e) => { e.stopPropagation(); archiveTask(taskData.id, taskData.status); }; 
               cardActions.appendChild(archiveButton);
@@ -963,14 +965,15 @@
           moveActions.className = 'task-move-actions flex gap-1.5'; 
           if (taskData.status !== 'todo') {
               const moveToTodoBtn = document.createElement('button');
-              moveToTodoBtn.innerHTML = iconArrowLeft; moveToTodoBtn.title = "Chuyển sang Cần làm";
+              moveToTodoBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>`; 
+              moveToTodoBtn.title = "Chuyển sang Cần làm";
               moveToTodoBtn.className = 'move-btn-todo p-1.5 rounded bg-slate-100 hover:bg-red-100 border border-slate-200 hover:border-red-300 text-red-600';
               moveToTodoBtn.onclick = (e) => { e.stopPropagation(); updateTaskStatusInFirestore(taskData.id, 'todo', taskData.status); };
               moveActions.appendChild(moveToTodoBtn);
           }
           if (taskData.status !== 'inprogress') {
               const moveToInProgressBtn = document.createElement('button');
-              moveToInProgressBtn.innerHTML = (taskData.status === 'todo') ? iconArrowRight : iconArrowLeft;
+              moveToInProgressBtn.innerHTML = (taskData.status === 'todo') ? `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>` : `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>`;
               moveToInProgressBtn.title = "Chuyển sang Đang làm";
               moveToInProgressBtn.className = 'move-btn-inprogress p-1.5 rounded bg-slate-100 hover:bg-amber-100 border border-slate-200 hover:border-amber-300 text-amber-600';
               moveToInProgressBtn.onclick = (e) => { e.stopPropagation(); updateTaskStatusInFirestore(taskData.id, 'inprogress', taskData.status); };
@@ -978,7 +981,8 @@
           }
           if (taskData.status !== 'done') {
               const moveToDoneBtn = document.createElement('button');
-              moveToDoneBtn.innerHTML = iconCheck; moveToDoneBtn.title = "Hoàn thành";
+              moveToDoneBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>`; 
+              moveToDoneBtn.title = "Hoàn thành";
               moveToDoneBtn.className = 'move-btn-done p-1.5 rounded bg-slate-100 hover:bg-green-100 border border-slate-200 hover:border-green-300 text-green-600';
               moveToDoneBtn.onclick = (e) => { e.stopPropagation(); updateTaskStatusInFirestore(taskData.id, 'done', taskData.status); };
               moveActions.appendChild(moveToDoneBtn);
@@ -1184,15 +1188,14 @@
           });
       });
 
-      toggleFilterBarBtn.addEventListener('click', () => {
-          filterBar.classList.toggle('filter-bar-visible');
-          const buttonTextSpan = toggleFilterBarBtn.querySelector('#toggle-filter-text');
-          if (filterBar.classList.contains('filter-bar-visible')) {
-              if(buttonTextSpan) buttonTextSpan.textContent = 'Ẩn Bộ Lọc';
-          } else {
-              if(buttonTextSpan) buttonTextSpan.textContent = 'Hiện Bộ Lọc';
-          }
-      });
+      // Gắn sự kiện cho nút icon filter mới
+      if (toggleFilterBarBtn) {
+        toggleFilterBarBtn.addEventListener('click', () => {
+            filterBar.classList.toggle('filter-bar-visible');
+            // Không cần cập nhật text nữa vì button chỉ là icon
+        });
+      }
+
       function populateFilterOptions() {
           const activeTasks = allTasks.filter(task => !task.isArchived);
           const assignees = new Set(); const tags = new Set();
@@ -1269,7 +1272,7 @@
                   const columnTitleElement = column.querySelector('.column-header h2');
                   const tabButton = document.getElementById(`tab-${status}`);
                   let columnDisplayName = status;
-                  if (columnTitleElement && columnTitleElement.offsetParent !== null) { 
+                  if (columnTitleElement && h2Visible(columnTitleElement)) { 
                       columnDisplayName = columnTitleElement.textContent.trim();
                   } else if (tabButton) { 
                      columnDisplayName = Array.from(tabButton.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent.trim()).join('') || status;
@@ -1283,6 +1286,11 @@
           updateColumnUI(); 
           applyMobileColumnVisibilityAndStyles();
       }
+      // Helper function to check if H2 is visible (not display:none)
+      function h2Visible(element) {
+        return element && getComputedStyle(element).display !== 'none';
+      }
+
       applyFiltersBtn.addEventListener('click', applyAllFilters);
       clearFiltersBtn.addEventListener('click', () => {
           searchTermInput.value = ''; filterPrioritySelect.value = ''; filterAssigneeSelect.value = '';
@@ -1290,25 +1298,21 @@
           applyAllFilters();
       });
 
-      // Hàm quản lý kiểu và hiển thị của cột/tab trên di động
       function applyMobileColumnVisibilityAndStyles() {
         const isMobileView = window.innerWidth < 768;
 
         mobileTabButtons.forEach(btn => {
-            // Xóa tất cả các lớp liên quan đến trạng thái active/inactive và màu sắc cột cụ thể
             btn.classList.remove(
-                'active-tab', 'font-semibold',
-                'bg-kanban-todo', 'text-kanban-todo-text', 'border-b-0',
+                'active-tab', 'font-semibold', 'border-b-0', 'shadow-inner',
+                'bg-kanban-todo', 'text-kanban-todo-text',
                 'bg-kanban-inprogress', 'text-kanban-inprogress-text',
                 'bg-kanban-done', 'text-kanban-done-text',
                 'bg-slate-200', 'hover:bg-slate-300', 'text-slate-700', 'border-transparent'
             );
-            // Thêm các lớp cơ bản cho tab (bo tròn trên, padding, margin)
-            btn.classList.add('rounded-t-lg', 'px-3', 'py-2.5', 'mr-1', 'last:mr-0');
+            btn.classList.add('rounded-t-lg', 'px-3', 'py-2', 'mr-1', 'last:mr-0'); // Giảm py từ 2.5 xuống 2
 
             if (isMobileView && btn.dataset.status === currentActiveMobileColumnId) {
-                // Tab đang hoạt động
-                btn.classList.add('active-tab', 'font-semibold', 'border-b-0'); // Không có border dưới
+                btn.classList.add('active-tab', 'font-semibold', 'border-b-0', 'shadow-inner'); 
                 if (currentActiveMobileColumnId === 'todo') {
                     btn.classList.add('bg-kanban-todo', 'text-kanban-todo-text');
                 } else if (currentActiveMobileColumnId === 'inprogress') {
@@ -1317,34 +1321,30 @@
                     btn.classList.add('bg-kanban-done', 'text-kanban-done-text');
                 }
             } else {
-                // Tab không hoạt động (hoặc không phải mobile view)
                 btn.classList.add('bg-slate-200', 'hover:bg-slate-300', 'text-slate-700', 'border-b-2', 'border-transparent');
             }
         });
 
         kanbanColumns.forEach(col => {
             const h2 = col.querySelector('.column-header h2');
-            col.classList.remove('rounded-t-none', 'md:rounded-lg'); // Xóa các lớp bo tròn có thể có
-            col.classList.add('rounded-lg'); // Thêm lại bo tròn mặc định cho tất cả các góc
+            col.classList.remove('rounded-t-none', 'md:rounded-lg', 'rounded-b-lg', 'rounded-lg'); // Reset bo tròn
 
             if (isMobileView) {
-                col.style.marginTop = '0'; // Đặt sát tab
+                col.style.marginTop = '0'; 
                 if (col.id === currentActiveMobileColumnId) {
                     col.style.display = 'flex';
-                    col.classList.remove('rounded-lg'); // Xóa bo tròn mặc định
-                    col.classList.add('rounded-b-lg'); // Chỉ bo tròn góc dưới
+                    col.classList.add('rounded-b-lg', 'rounded-t-none', 'shadow-lg'); // Chỉ bo tròn góc dưới, không bo góc trên, thêm shadow
                     if (h2) h2.style.display = 'none';
                 } else {
                     col.style.display = 'none';
+                    col.classList.add('rounded-lg'); // Các cột ẩn vẫn giữ bo tròn đầy đủ
                     if (h2) h2.style.display = ''; 
                 }
-            } else { // Chế độ xem máy tính để bàn
+            } else { 
                 col.style.display = 'flex';
                 col.style.marginTop = ''; 
+                col.classList.add('rounded-lg'); // Bo tròn đầy đủ cho desktop
                 if (h2) h2.style.display = '';
-                // Đảm bảo cột có bo tròn đầy đủ trên desktop
-                col.classList.add('rounded-lg'); 
-                col.classList.remove('rounded-b-lg', 'rounded-t-none');
             }
         });
       }
@@ -1361,6 +1361,15 @@
       function handleMobileLayout() {
           const isMobileView = window.innerWidth < 768;
           kanbanMobileTabs.style.display = isMobileView ? 'flex' : 'none';
+          // Điều chỉnh hiển thị header dựa trên kích thước màn hình
+          const projectTitleElement = document.getElementById('project-display-name');
+          if (isMobileView) {
+            projectTitleElement.classList.remove('md:text-center', 'md:absolute', 'md:left-1/2', 'md:-translate-x-1/2', 'text-xl');
+            projectTitleElement.classList.add('text-lg');
+          } else {
+            projectTitleElement.classList.add('md:text-center', 'md:absolute', 'md:left-1/2', 'md:-translate-x-1/2', 'text-xl');
+            projectTitleElement.classList.remove('text-lg');
+          }
           applyMobileColumnVisibilityAndStyles(); 
       }
       window.addEventListener('resize', handleMobileLayout);
@@ -1489,12 +1498,14 @@
         const projectDisplayNameElement = document.getElementById('project-display-name');
 
         if (!projectId) {
-            if(projectDisplayNameElement) projectDisplayNameElement.textContent = "KHÔNG HỢP LỆ";
+            if(projectDisplayNameElement) projectDisplayNameElement.textContent = "Dự án không hợp lệ";
             showAlert("Không tìm thấy ID dự án. Vui lòng truy cập từ trang quản lý dự án.");
             return; 
         }
 
+        // Chỉ hiển thị tên dự án (đã loại bỏ "Bảng Ghi Chú Dự Án: ")
         if(projectDisplayNameElement) projectDisplayNameElement.textContent = projectId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        
         tasksCollectionPath = `projects/${projectId}/tasks`;
         console.log("Kanban initialized for project:", projectId, "Tasks path:", tasksCollectionPath);
 
